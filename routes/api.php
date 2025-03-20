@@ -48,6 +48,11 @@ Route::get('categorias/all', [CategoriasController::class, 'index']);
 Route::post('/reacciones/toggle', [ReaccionController::class, 'toggle']);
 Route::get('/reacciones/{reporteId}', [ReaccionController::class, 'getReacciones']);
 
-Route::post('/comentarios', [ComentarioController::class, 'store']);
-Route::get('/comentarios/{reporteId}', [ComentarioController::class, 'getComentarios']);
-Route::delete('/comentarios/{id}', [ComentarioController::class, 'destroy']);
+// Rutas para comentarios
+Route::prefix('comentarios')->group(function () {
+    Route::post('/', [ComentarioController::class, 'store']);
+    Route::get('/count/{reporteId}', [ComentarioController::class, 'contarComentariosReporte']);
+    Route::get('/principales/{reporteId}', [ComentarioController::class, 'getComentariosPrincipales']);
+    Route::get('/respuestas/{comentarioId}', [ComentarioController::class, 'getRespuestasComentario']);
+    Route::delete('/{id}', [ComentarioController::class, 'destroy']);
+});

@@ -89,6 +89,92 @@ class ComentarioController extends Controller
         }
     }
 
+    // Contar todos los comentarios de un reporte
+    public function contarComentariosReporte($reporteId)
+    {
+        try {
+            $conteo = [
+                'total' => Comentario::where('reporte_id', $reporteId)->count(),
+                'principales' => Comentario::where('reporte_id', $reporteId)
+                    ->whereNull('padre_id')
+                    ->count(),
+                'respuestas' => Comentario::where('reporte_id', $reporteId)
+                    ->whereNotNull('padre_id')
+                    ->count()
+            ];
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $conteo
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error contando comentarios: ' . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    // Obtener solo comentarios principales de un reporte
+    public function getComentariosPrincipales($reporteId)
+    {
+        try {
+            $comentarios = Comentario::where('reporte_id', $reporteId)
+                ->whereNull('padre_id')
+                ->with('usuario:id,nombre')
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function($comentario) {
+                    return [
+                        'id' => $comentario->id,
+                        'contenido' => $comentario->contenido,
+                        'usuario' => [
+                            'id' => $comentario->usuario->id,
+                            'nombre' => $comentario->usuario->nombre
+                        ],
+                        'created_at' => $comentario->created_at,
+                        'contador_respuestas' => Comentario::where('padre_id', $comentario->id)->count()
+                    ];
+                });
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $comentarios
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error obteniendo comentarios principales: ' . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    // Obtener respuestas de un comentario específico
+    public function getRespuestasComentario($comentarioId)
+    {
+        try {
+            $respuestas = Comentario::where('padre_id', $comentarioId)
+                ->with('usuario:id,nombre')
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function($respuesta) {
+                    return [
+                        'id' => $respuesta->id,
+                        'contenido' => $respuesta->contenido,
+                        'usuario' => [
+                            'id' => $respuesta->usuario->id,
+                            'nombre' => $respuesta->usuario->nombre
+                        ],
+                        'created_at' => $respuesta->created_at
+                    ];
+                });
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $respuestas
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error obteniendo respuestas: ' . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
     public function destroy($id)
     {
         $comentario = Comentario::findOrFail($id);
