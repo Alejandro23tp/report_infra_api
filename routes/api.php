@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\ComentarioController;
 use App\Http\Controllers\LoginController;
- use App\Http\Controllers\UserController;
+use App\Http\Controllers\ReaccionController;
+use App\Http\Controllers\UserController;
 use App\Rest\Controllers\CategoriasController;
 use App\Rest\Controllers\ReportesController;
 use App\Rest\Controllers\UsuariosController;
@@ -41,3 +43,11 @@ Route::post('reportes/actualizar/{id}', [ReportesController::class, 'actualizarE
 //CATEGORIAS
 Rest::resource('categorias', CategoriasController::class);
 Route::get('categorias/all', [CategoriasController::class, 'index']);
+
+// Rutas para reacciones y comentarios (sin autenticación)
+Route::post('/reacciones/toggle', [ReaccionController::class, 'toggle']);
+Route::get('/reacciones/{reporteId}', [ReaccionController::class, 'getReacciones']);
+
+Route::post('/comentarios', [ComentarioController::class, 'store']);
+Route::get('/comentarios/{reporteId}', [ComentarioController::class, 'getComentarios']);
+Route::delete('/comentarios/{id}', [ComentarioController::class, 'destroy']);
