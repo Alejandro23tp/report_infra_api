@@ -2,31 +2,31 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Reporte extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
         'usuario_id',
         'categoria_id',
         'descripcion',
         'ubicacion',
-        'estado',
-        'urgencia',
         'imagen_url',
+        'estado',
+        'urgencia'
+    ];
+
+    protected $casts = [
+        'ubicacion' => 'array'
     ];
 
     public function usuario()
     {
-        return $this->belongsTo(Usuario::class);
+        return $this->belongsTo(User::class, 'usuario_id'); // Cambiado a User
     }
-    
+
     public function categoria()
     {
         return $this->belongsTo(Categoria::class);
     }
-    
 }

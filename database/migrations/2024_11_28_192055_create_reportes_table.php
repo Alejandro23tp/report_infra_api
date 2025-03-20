@@ -13,12 +13,18 @@ return new class extends Migration
     {
         Schema::create('reportes', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('usuario_id')->constrained('usuarios')->onDelete('cascade');
-            $table->foreignId('categoria_id')->constrained('categorias')->onDelete('cascade');
+            $table->foreignId('usuario_id')
+                  ->references('id')
+                  ->on('users')  // Referencia a la tabla 'users'
+                  ->onDelete('cascade');
+            $table->foreignId('categoria_id')
+                  ->nullable()
+                  ->constrained('categorias')
+                  ->nullOnDelete();
             $table->text('descripcion');
             $table->json('ubicacion');
-            $table->enum('estado', ['pendiente', 'en_proceso', 'resuelto'])->default('pendiente');
-            $table->enum('urgencia', ['normal', 'urgente'])->default('normal');
+            $table->enum('estado', ['pendiente', 'en_proceso', 'completado'])->default('pendiente');
+            $table->enum('urgencia', ['baja', 'normal', 'alta'])->default('normal');
             $table->string('imagen_url')->nullable();
             $table->timestamps();
         });
