@@ -17,6 +17,12 @@ use Illuminate\Support\Facades\DB;
 class ReportesController extends RestController
 {
     /**
+     * The model associated with the controller.
+     *
+     * @var string
+     */
+    protected $model = \App\Models\Reporte::class;
+    /**
      * The resource the controller corresponds to.
      *
      * @var class-string<\Lomkit\Rest\Http\Resource>
@@ -475,5 +481,47 @@ class ReportesController extends RestController
             'mensaje' => 'Estado del reporte actualizado',
             'data' => new ReporteResource($reporte)
         ]);
+    }
+
+    public function getUbicaciones()
+    {
+        try {
+            $reportes = $this->model::query()
+                ->with(['categoria:id,nombre'])
+                ->select([
+                    'id',
+                    'ubicacion',
+                    'estado',
+                    'urgencia',
+                    'categoria_id',
+                    'descripcion'
+                ])
+                ->get()
+                ->map(function($reporte) {
+                    $ubicacion = json_decode($reporte->ubicacion, true);
+                    return [
+                        'id' => $reporte->id,
+                        'ubicacion' => [
+                            'lat' => (float)$ubicacion['lat'],
+                            'lng' => (float)$ubicacion['lon'], // Nota: usamos 'lon' en lugar de 'lng'
+                            'descripcion' => $reporte->descripcion // Usamos descripción como dirección
+                        ],
+                        'estado' => $reporte->estado,
+                        'urgencia' => $reporte->urgencia,
+                        'categoria' => $reporte->categoria->nombre
+                    ];
+                });
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $reportes
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 }

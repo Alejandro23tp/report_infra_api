@@ -40,6 +40,8 @@ Route::post('reportes/crear', [ReportesController::class, 'crearReporte']);
 Route::post('reportes/{id}/imagen', [ReportesController::class, 'subirImagen']);
 Route::post('reportes/actualizar/{id}', [ReportesController::class, 'actualizarEstado']);
 
+Route::get('reportes/ubicaciones/all', [ReportesController::class, 'getUbicaciones']);
+
 //CATEGORIAS
 Rest::resource('categorias', CategoriasController::class);
 Route::get('categorias/all', [CategoriasController::class, 'index']);
