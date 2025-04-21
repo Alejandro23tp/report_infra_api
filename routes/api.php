@@ -23,7 +23,7 @@ Route::group([
 
 Route::get('/user', function (Request $request) {
     return $request->user();
-})->middleware('auth:sanctum');
+})->middleware('auth:api');
 
 Rest::resource('usuarios', UsuariosController::class);
 // Ruta para listar todos los usuarios
