@@ -2,455 +2,101 @@
 
 namespace App\Rest\Controllers;
 
-use App\Models\Reporte;
+use App\Models\{Reporte, Categoria, User};
 use App\Rest\Controller as RestController;
 use App\Rest\Resources\ReporteResource;
 use Google\Cloud\Vision\V1\ImageAnnotatorClient;
-use GuzzleHttp\Client;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Validator;
-use App\Models\Categoria;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\{DB, Log, Storage, Validator};
 
 class ReportesController extends RestController
 {
-    /**
-     * The model associated with the controller.
-     *
-     * @var string
-     */
-    protected $model = \App\Models\Reporte::class;
-    /**
-     * The resource the controller corresponds to.
-     *
-     * @var class-string<\Lomkit\Rest\Http\Resource>
-     */
+    protected $model = Reporte::class;
     public static $resource = ReporteResource::class;
 
-    private function clasificarCategoria($labels) {
-        $categorias = [
-            'Daños estructurales' => [
-                'building damage', 'structural damage', 'wall damage', 'crack', 
-                'broken structure', 'construction damage', 'foundation damage'
-            ],
-            'Daños en redes de servicios' => [
-                'utility damage', 'electrical damage', 'water leak', 'broken pipe',
-                'cable damage', 'power line', 'utility infrastructure'
-            ],
-            'Daños en infraestructuras de transporte' => [
-                'road damage', 'pothole', 'broken pavement', 'bridge damage',
-                'traffic infrastructure', 'street damage', 'sidewalk damage'
-            ],
-            'Daños causados por fenómenos naturales' => [
-                'flood damage', 'storm damage', 'landslide', 'weather damage',
-                'natural disaster', 'erosion', 'earthquake damage'
-            ],
-            'Daños en espacios públicos' => [
-                'park damage', 'plaza damage', 'public space', 'bench damage',
-                'playground damage', 'public furniture', 'street light damage'
-            ],
-            'Impacto ambiental asociado' => [
-                'pollution', 'environmental damage', 'waste', 'contamination',
-                'ecological damage', 'environmental impact', 'debris'
-            ],
-            'Daños por conflictos humanos' => [
-                'vandalism', 'graffiti', 'intentional damage', 'human caused',
-                'destruction', 'sabotage', 'criminal damage'
-            ]
-        ];
+    // Constantes para categorías y palabras clave
+    protected const CATEGORIAS = [
+        'Daños estructurales' => ['building damage', 'structural damage', 'wall damage', 'crack', 'broken structure'],
+        'Daños en redes de servicios' => ['utility damage', 'electrical damage', 'water leak', 'broken pipe'],
+        'Daños en infraestructuras de transporte' => ['road damage', 'pothole', 'broken pavement', 'bridge damage'],
+        'Daños causados por fenómenos naturales' => ['flood damage', 'storm damage', 'landslide', 'weather damage'],
+        'Daños en espacios públicos' => ['park damage', 'plaza damage', 'public space', 'bench damage'],
+        'Impacto ambiental asociado' => ['pollution', 'environmental damage', 'waste', 'contamination'],
+        'Daños por conflictos humanos' => ['vandalism', 'graffiti', 'intentional damage', 'human caused']
+    ];
 
-        $puntajes = array_fill_keys(array_keys($categorias), 0);
+    protected const PALABRAS_CLAVE = [
+        'damage', 'broken', 'crack', 'deterioration', 'road', 'street', 'infrastructure',
+        'building', 'bridge', 'utility', 'pipe', 'concrete', 'asphalt', 'metal', 'erosion',
+        'corrosion', 'bench', 'sign', 'unsafe', 'hazard', 'risk', 'emergency'
+    ];
 
-        foreach ($labels as $label) {
-            $labelLower = strtolower($label);
-            foreach ($categorias as $categoria => $keywords) {
-                foreach ($keywords as $keyword) {
-                    if (str_contains($labelLower, $keyword)) {
-                        $puntajes[$categoria] += 1;
-                        break;
-                    }
-                }
-            }
-        }
-
-        arsort($puntajes);
-        $categoriaSeleccionada = key($puntajes);
-        $confianza = current($puntajes) > 0 ? current($puntajes) / count($labels) : 0;
-
-        return [
-            'categoria' => $categoriaSeleccionada,
-            'confianza' => $confianza,
-            'puntajes' => $puntajes
-        ];
-    }
-
-    private function esImagenRelevante($etiquetas) {
-        // Palabras clave que indican daños en infraestructura urbana
-        $palabrasClaveRelevantes = [
-            // Daños generales
-            'damage', 'broken', 'crack', 'deterioration', 'decay', 'worn',
-            'destroyed', 'collapse', 'failure', 'defect', 'hole', 'leak',
-            
-            // Infraestructura vial
-            'road', 'street', 'highway', 'sidewalk', 'pavement', 'asphalt',
-            'pothole', 'curb', 'crossing', 'intersection', 'pathway', 'lane',
-            
-            // Infraestructura urbana
-            'infrastructure', 'building', 'bridge', 'tunnel', 'construction',
-            'wall', 'fence', 'barrier', 'foundation', 'column', 'pillar',
-            
-            // Servicios públicos
-            'utility', 'pipe', 'drainage', 'sewer', 'manhole', 'gutter',
-            'electrical', 'wiring', 'cable', 'pole', 'lighting', 'lamppost',
-            
-            // Materiales
-            'concrete', 'asphalt', 'metal', 'steel', 'iron', 'wood',
-            'brick', 'stone', 'cement', 'material', 'surface', 'structure',
-            
-            // Tipos de daños
-            'erosion', 'corrosion', 'rust', 'rupture', 'breakage', 'obstruction',
-            'deformation', 'displacement', 'sinking', 'flooding', 'spill',
-            
-            // Mobiliario urbano
-            'bench', 'sign', 'signal', 'traffic light', 'bus stop', 'shelter',
-            'guardrail', 'railing', 'fence', 'bin', 'drain', 'hydrant',
-            
-            // Descriptores de estado
-            'unsafe', 'hazard', 'risk', 'emergency', 'structural', 'critical',
-            'urgent', 'severe', 'dangerous', 'poor condition', 'maintenance'
-        ];
-    
-        $contadorRelevante = 0;
-        foreach ($etiquetas as $etiqueta) {
-            $etiquetaLower = strtolower($etiqueta);
-            foreach ($palabrasClaveRelevantes as $palabra) {
-                if (str_contains($etiquetaLower, $palabra)) {
-                    $contadorRelevante++;
-                }
-            }
-        }
-    
-        // Requiere al menos 2 palabras clave relevantes
-        return $contadorRelevante >= 2;
-    }
-
-    private function verificarImagenConGoogleCloud($imagen)
-    {
-        try {
-            // Obtener y decodificar credenciales desde .env
-            $encodedCredentials = env('GOOGLE_CREDENTIALS_BASE64');
-            if (!$encodedCredentials) {
-                throw new \Exception('Credenciales de Google Cloud no configuradas');
-            }
-
-            $decodedCredentials = base64_decode($encodedCredentials);
-            $credentials = json_decode($decodedCredentials, true);
-
-            if (!$credentials) {
-                throw new \Exception('Error al decodificar las credenciales');
-            }
-
-            // Crear cliente con credenciales decodificadas
-            $imageAnnotator = new ImageAnnotatorClient([
-                'credentials' => $credentials
-            ]);
-            
-            // Asegurarse de que la imagen es válida
-            if (!$imagen->isValid()) {
-                throw new \Exception('Archivo de imagen no válido');
-            }
-
-            $image = file_get_contents($imagen->getPathname());
-            $response = $imageAnnotator->labelDetection($image);
-            $labels = $response->getLabelAnnotations();
-
-            $etiquetas = [];
-            foreach ($labels as $label) {
-                $etiquetas[] = $label->getDescription();
-            }
-
-            // Verificar relevancia
-            if (!$this->esImagenRelevante($etiquetas)) {
-                return [
-                    'success' => false,
-                    'message' => 'La imagen no parece mostrar daños en infraestructura urbana',
-                    'etiquetas' => $etiquetas,
-                    'error_tipo' => 'imagen_no_relevante'
-                ];
-            }
-
-            $clasificacion = $this->clasificarCategoria($etiquetas);
-
-            return [
-                'success' => true,
-                'etiquetas' => $etiquetas,
-                'categoria_sugerida' => $clasificacion['categoria'],
-                'confianza' => $clasificacion['confianza'],
-                'detalles_clasificacion' => $clasificacion['puntajes'],
-                'message' => 'Imagen analizada correctamente'
-            ];
-
-        } catch (\Exception $e) {
-            Log::error('Error en Google Vision:', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            return [
-                'success' => false,
-                'message' => $e->getMessage()
-            ];
-        } finally {
-            if (isset($imageAnnotator)) {
-                $imageAnnotator->close();
-            }
-        }
-    }
-
-    private function obtenerOCrearCategoria($nombreCategoria) {
-        try {
-            Log::info('Buscando categoría:', ['nombre' => $nombreCategoria]);
-            
-            $categoria = Categoria::where('nombre', $nombreCategoria)->first();
-            
-            if (!$categoria) {
-                Log::info('Categoría no encontrada, creando nueva:', ['nombre' => $nombreCategoria]);
-                
-                $categoria = DB::transaction(function() use ($nombreCategoria) {
-                    return Categoria::create([
-                        'nombre' => $nombreCategoria,
-                        'descripcion' => 'Categoría detectada automáticamente',
-                        'activo' => true
-                    ]);
-                });
-                
-                Log::info('Categoría creada exitosamente:', [
-                    'id' => $categoria->id,
-                    'nombre' => $categoria->nombre
-                ]);
-            } else {
-                Log::info('Categoría existente encontrada:', [
-                    'id' => $categoria->id,
-                    'nombre' => $categoria->nombre
-                ]);
-            }
-            
-            return $categoria;
-        } catch (\Exception $e) {
-            Log::error('Error en obtenerOCrearCategoria:', [
-                'nombre' => $nombreCategoria,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            throw new \Exception('Error al procesar la categoría: ' . $e->getMessage());
-        }
-    }
-
+    /**
+     * Analiza una imagen para detectar daños
+     */
     public function analizarImagen(Request $request)
     {
+        $validator = Validator::make($request->all(), [
+            'imagen' => 'required|file|image|mimes:jpeg,png,jpg|max:10240'
+        ]);
+
+        if ($validator->fails()) {
+            return $this->errorResponse($validator->errors(), 'Error de validación', 400);
+        }
+
         try {
-            $validator = Validator::make($request->all(), [
-                'imagen' => 'required|file|image|mimes:jpeg,png,jpg|max:10240'
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Error de validación',
-                    'errors' => $validator->errors()
-                ], 400);
-            }
-
-            $resultado = $this->verificarImagenConGoogleCloud($request->file('imagen'));
-            return response()->json($resultado);
-
+            return response()->json($this->analizarImagenConGoogle($request->file('imagen')));
         } catch (\Exception $e) {
-            Log::error('Error al analizar imagen:', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            return response()->json([
-                'success' => false,
-                'message' => 'Error al analizar la imagen'
-            ], 500);
+            Log::error('Error analizando imagen: '.$e->getMessage());
+            return $this->errorResponse([], 'Error al analizar la imagen', 500);
         }
     }
 
+    /**
+     * Crea un nuevo reporte
+     */
     public function crearReporte(Request $request)
     {
+        $validator = Validator::make($request->all(), [
+            'usuario_id' => 'required|exists:users,id',
+            'descripcion' => 'required|string',
+            'ubicacion' => 'required',
+            'imagen' => 'nullable|file|mimes:jpeg,png,jpg,gif|max:10240'
+        ]);
+
+        if ($validator->fails()) {
+            return $this->errorResponse($validator->errors(), 'Error de validación', 422);
+        }
+
         try {
-            // Verificar si el usuario existe
-            $usuario = \App\Models\User::find($request->usuario_id);
-            if (!$usuario) {
-                return response()->json([
-                    'error' => 'Usuario no encontrado',
-                    'details' => 'El usuario_id proporcionado no existe'
-                ], 404);
-            }
+            DB::beginTransaction();
 
-            Log::info('Iniciando creación de reporte', [
-                'request_all' => $request->all(),
-                'files' => $request->allFiles(),
-                'headers' => $request->headers->all()
-            ]);
+            // Procesar categoría
+            $categoriaData = $request->hasFile('imagen') 
+                ? $this->procesarCategoriaDesdeImagen($request->file('imagen'))
+                : $this->obtenerCategoriaDefault();
 
-            // Validación básica sin requerir categoria_id
-            $validator = Validator::make($request->all(), [
-                'usuario_id' => 'required',
-                'descripcion' => 'required|string',
-                'ubicacion' => 'required',
-                'imagen' => 'nullable|file|mimes:jpeg,png,jpg,gif|max:10240'
-            ]);
+            // Crear reporte
+            $reporte = $this->crearNuevoReporte($request, $categoriaData['id']);
 
-            if ($validator->fails()) {
-                Log::error('Validación fallida', ['errors' => $validator->errors()->toArray()]);
-                return response()->json([
-                    'error' => 'Error de validación',
-                    'details' => $validator->errors()
-                ], 422);
-            }
-
-            // Procesar imagen y obtener categoría
-            $categoriaId = null;
-            $categoriaInfo = null;
-            $resultado = null;
-
+            // Procesar imagen si existe
             if ($request->hasFile('imagen')) {
-                $resultado = $this->verificarImagenConGoogleCloud($request->file('imagen'));
-                Log::info('Resultado análisis de imagen:', $resultado);
-                
-                if ($resultado['success'] && !empty($resultado['categoria_sugerida'])) {
-                    try {
-                        $categoria = $this->obtenerOCrearCategoria($resultado['categoria_sugerida']);
-                        $categoriaId = $categoria->id;
-                        $categoriaInfo = [
-                            'id' => $categoria->id,
-                            'nombre' => $categoria->nombre,
-                            'sugerida' => true,
-                            'confianza' => $resultado['confianza']
-                        ];
-                    } catch (\Exception $e) {
-                        Log::error('Error al procesar categoría sugerida:', ['error' => $e->getMessage()]);
-                        // Si falla, usaremos la categoría por defecto
-                    }
-                }
+                $this->guardarImagenReporte($reporte, $request->file('imagen'));
             }
 
-            // Si no se pudo obtener una categoría, usar la por defecto
-            if (!$categoriaId) {
-                try {
-                    $categoria = $this->obtenerOCrearCategoria('Sin clasificar');
-                    $categoriaId = $categoria->id;
-                    $categoriaInfo = [
-                        'id' => $categoria->id,
-                        'nombre' => $categoria->nombre,
-                        'sugerida' => false
-                    ];
-                } catch (\Exception $e) {
-                    Log::error('Error al crear categoría por defecto:', ['error' => $e->getMessage()]);
-                    return response()->json([
-                        'error' => 'Error al procesar la categoría',
-                        'message' => $e->getMessage()
-                    ], 500);
-                }
-            }
+            DB::commit();
 
-            // Procesar ubicación
-            try {
-                $ubicacion = $request->ubicacion;
-                if (is_string($ubicacion)) {
-                    $ubicacion = json_decode($ubicacion, true);
-                }
-
-                if (!is_array($ubicacion)) {
-                    $ubicacion = json_decode(json_encode($ubicacion), true);
-                }
-
-                Log::info('Ubicación procesada', ['ubicacion' => $ubicacion]);
-
-                if (!isset($ubicacion['lat']) || !isset($ubicacion['lon'])) {
-                    throw new \Exception('Ubicación inválida: debe contener lat y lon');
-                }
-            } catch (\Exception $e) {
-                Log::error('Error procesando ubicación', [
-                    'error' => $e->getMessage(),
-                    'ubicacion_original' => $request->ubicacion
-                ]);
-                return response()->json([
-                    'error' => 'Error en formato de ubicación',
-                    'details' => $e->getMessage()
-                ], 422);
-            }
-
-            try {
-                DB::beginTransaction();
-
-                // Crear reporte base
-                $reporteData = [
-                    'usuario_id' => $request->usuario_id,
-                    'categoria_id' => $categoriaId, // Usar la categoría determinada
-                    'descripcion' => $request->descripcion,
-                    'ubicacion' => json_encode([
-                        'lat' => (float)$ubicacion['lat'],
-                        'lon' => (float)$ubicacion['lon']
-                    ]),
-                    'estado' => $request->estado ?? 'pendiente',
-                    'urgencia' => $request->urgencia ?? 'normal'
-                ];
-
-                Log::info('Creando reporte con datos', ['data' => $reporteData]);
-                
-                $reporte = Reporte::create($reporteData);
-
-                // Procesar imagen si existe
-                if ($request->hasFile('imagen') && $request->file('imagen')->isValid()) {
-                    $file = $request->file('imagen');
-                    $filename = time() . '_' . $file->getClientOriginalName();
-                    
-                    $file = $request->file('imagen');
-                    $filename = time() . '_' . $file->getClientOriginalName();
-                    $path = $file->storeAs('public/reportes', $filename);
-                    if (!$path) {
-                        throw new \Exception('Error al guardar la imagen');
-                    }
-
-                    // Corregir la URL de la imagen para evitar doble slash
-                    $reporte->imagen_url = ltrim(Storage::url($path), '/');
-                    $reporte->save();
-                }
-
-                DB::commit();
-
-                Log::info('Reporte creado exitosamente', ['reporte_id' => $reporte->id]);
-
-                return response()->json([
-                    'mensaje' => 'Reporte creado con éxito',
-                    'data' => new ReporteResource($reporte),
-                    'categoria' => $categoriaInfo,
-                    'analisis_imagen' => $resultado['success'] ? $resultado : null
-                ], 201);
-
-            } catch (\Exception $e) {
-                DB::rollBack();
-                Log::error('Error en transacción', [
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ]);
-                throw $e;
-            }
+            return response()->json([
+                'mensaje' => 'Reporte creado con éxito',
+                'data' => new ReporteResource($reporte),
+                'categoria' => $categoriaData['info'],
+                'analisis_imagen' => $categoriaData['analysis'] ?? null
+            ], 201);
 
         } catch (\Exception $e) {
-            Log::error('Error general en crearReporte', [
-                'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'request' => $request->all()
-            ]);
-            
-            return response()->json([
-                'error' => 'Error al crear el reporte',
-                'message' => $e->getMessage()
-            ], 500);
+            DB::rollBack();
+            Log::error('Error creando reporte: '.$e->getMessage());
+            return $this->errorResponse([], 'Error al crear el reporte', 500);
         }
     }
 
@@ -483,19 +129,14 @@ class ReportesController extends RestController
         ]);
     }
 
+    /**
+     * Obtiene ubicaciones para mapas
+     */
     public function getUbicaciones()
     {
         try {
-            $reportes = $this->model::query()
-                ->with(['categoria:id,nombre'])
-                ->select([
-                    'id',
-                    'ubicacion',
-                    'estado',
-                    'urgencia',
-                    'categoria_id',
-                    'descripcion'
-                ])
+            $reportes = Reporte::with('categoria:id,nombre')
+                ->select(['id', 'ubicacion', 'estado', 'urgencia', 'categoria_id', 'descripcion'])
                 ->get()
                 ->map(function($reporte) {
                     $ubicacion = json_decode($reporte->ubicacion, true);
@@ -503,8 +144,8 @@ class ReportesController extends RestController
                         'id' => $reporte->id,
                         'ubicacion' => [
                             'lat' => (float)$ubicacion['lat'],
-                            'lng' => (float)$ubicacion['lon'], // Nota: usamos 'lon' en lugar de 'lng'
-                            'descripcion' => $reporte->descripcion // Usamos descripción como dirección
+                            'lng' => (float)$ubicacion['lon'],
+                            'descripcion' => $reporte->descripcion
                         ],
                         'estado' => $reporte->estado,
                         'urgencia' => $reporte->urgencia,
@@ -512,16 +153,177 @@ class ReportesController extends RestController
                     ];
                 });
 
-            return response()->json([
-                'status' => 'success',
-                'data' => $reportes
-            ]);
-
+            return response()->json(['status' => 'success', 'data' => $reportes]);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => $e->getMessage()
-            ], 500);
+            return $this->errorResponse([], 'Error al obtener ubicaciones', 500);
         }
+    }
+
+    // Métodos protegidos auxiliares
+
+    protected function errorResponse($errors, $message, $code)
+    {
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+            'errors' => $errors
+        ], $code);
+    }
+
+    protected function analizarImagenConGoogle($imagen)
+    {
+        $credentials = $this->obtenerCredencialesGoogle();
+        $imageAnnotator = new ImageAnnotatorClient(['credentials' => $credentials]);
+
+        try {
+            $image = file_get_contents($imagen->getPathname());
+            $response = $imageAnnotator->labelDetection($image);
+            $etiquetas = array_map(fn($label) => $label->getDescription(), iterator_to_array($response->getLabelAnnotations()));
+
+            if (!$this->esImagenRelevante($etiquetas)) {
+                return [
+                    'success' => false,
+                    'message' => 'La imagen no parece mostrar daños en infraestructura urbana',
+                    'etiquetas' => $etiquetas,
+                    'error_tipo' => 'imagen_no_relevante'
+                ];
+            }
+
+            $clasificacion = $this->clasificarCategoria($etiquetas);
+
+            return [
+                'success' => true,
+                'etiquetas' => $etiquetas,
+                'categoria_sugerida' => $clasificacion['categoria'],
+                'confianza' => $clasificacion['confianza'],
+                'detalles_clasificacion' => $clasificacion['puntajes'],
+                'message' => 'Imagen analizada correctamente'
+            ];
+        } finally {
+            $imageAnnotator->close();
+        }
+    }
+
+    protected function esImagenRelevante($etiquetas)
+    {
+        $contador = 0;
+        foreach ($etiquetas as $etiqueta) {
+            foreach (self::PALABRAS_CLAVE as $palabra) {
+                if (stripos($etiqueta, $palabra) !== false) {
+                    if (++$contador >= 2) return true;
+                    break;
+                }
+            }
+        }
+        return false;
+    }
+
+    protected function clasificarCategoria($labels)
+    {
+        $puntajes = array_fill_keys(array_keys(self::CATEGORIAS), 0);
+
+        foreach ($labels as $label) {
+            foreach (self::CATEGORIAS as $categoria => $keywords) {
+                foreach ($keywords as $keyword) {
+                    if (stripos($label, $keyword) !== false) {
+                        $puntajes[$categoria]++;
+                        break;
+                    }
+                }
+            }
+        }
+
+        arsort($puntajes);
+        return [
+            'categoria' => key($puntajes),
+            'confianza' => current($puntajes) / count($labels),
+            'puntajes' => $puntajes
+        ];
+    }
+
+    protected function obtenerCredencialesGoogle()
+    {
+        $credentials = json_decode(base64_decode(env('GOOGLE_CREDENTIALS_BASE64')), true);
+        if (!$credentials) throw new \Exception('Error con credenciales de Google');
+        return $credentials;
+    }
+
+    protected function procesarCategoriaDesdeImagen($imagen)
+    {
+        $resultado = $this->analizarImagenConGoogle($imagen);
+        
+        if (!$resultado['success']) {
+            return $this->obtenerCategoriaDefault();
+        }
+
+        $categoria = $this->obtenerOCrearCategoria($resultado['categoria_sugerida']);
+        
+        return [
+            'id' => $categoria->id,
+            'info' => [
+                'id' => $categoria->id,
+                'nombre' => $categoria->nombre,
+                'sugerida' => true,
+                'confianza' => $resultado['confianza']
+            ],
+            'analysis' => $resultado
+        ];
+    }
+
+    protected function obtenerCategoriaDefault()
+    {
+        $categoria = $this->obtenerOCrearCategoria('Sin clasificar');
+        return [
+            'id' => $categoria->id,
+            'info' => [
+                'id' => $categoria->id,
+                'nombre' => $categoria->nombre,
+                'sugerida' => false
+            ]
+        ];
+    }
+
+    protected function obtenerOCrearCategoria($nombre)
+    {
+        return Categoria::firstOrCreate(
+            ['nombre' => $nombre],
+            ['descripcion' => 'Categoría detectada automáticamente', 'activo' => true]
+        );
+    }
+
+    protected function crearNuevoReporte(Request $request, $categoriaId)
+    {
+        $ubicacion = $this->parsearUbicacion($request->ubicacion);
+
+        return Reporte::create([
+            'usuario_id' => $request->usuario_id,
+            'categoria_id' => $categoriaId,
+            'descripcion' => $request->descripcion,
+            'ubicacion' => json_encode($ubicacion),
+            'estado' => $request->estado ?? 'pendiente',
+            'urgencia' => $request->urgencia ?? 'normal'
+        ]);
+    }
+
+    protected function parsearUbicacion($ubicacion)
+    {
+        if (is_string($ubicacion)) $ubicacion = json_decode($ubicacion, true);
+        if (!is_array($ubicacion)) $ubicacion = (array)$ubicacion;
+        
+        if (!isset($ubicacion['lat']) || !isset($ubicacion['lon'])) {
+            throw new \Exception('Ubicación inválida: debe contener lat y lon');
+        }
+
+        return [
+            'lat' => (float)$ubicacion['lat'],
+            'lon' => (float)$ubicacion['lon']
+        ];
+    }
+
+    protected function guardarImagenReporte($reporte, $imagen)
+    {
+        $path = $imagen->store('public/reportes');
+        if (!$path) throw new \Exception('Error al guardar la imagen');
+        $reporte->update(['imagen_url' => ltrim(Storage::url($path), '/')]);
     }
 }
