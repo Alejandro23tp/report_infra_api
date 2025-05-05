@@ -136,7 +136,7 @@ class ReportesController extends RestController
     {
         try {
             $reportes = Reporte::with('categoria:id,nombre')
-                ->select(['id', 'ubicacion', 'estado', 'urgencia', 'categoria_id', 'descripcion'])
+                ->select(['id', 'ubicacion', 'estado', 'urgencia', 'categoria_id', 'descripcion', 'imagen_url'])
                 ->get()
                 ->map(function($reporte) {
                     $ubicacion = json_decode($reporte->ubicacion, true);
@@ -147,6 +147,7 @@ class ReportesController extends RestController
                             'lng' => (float)$ubicacion['lon'],
                             'descripcion' => $reporte->descripcion
                         ],
+                        'imagen' => $reporte->imagen_url,
                         'estado' => $reporte->estado,
                         'urgencia' => $reporte->urgencia,
                         'categoria' => $reporte->categoria->nombre
