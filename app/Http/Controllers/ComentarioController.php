@@ -18,7 +18,7 @@ class ComentarioController extends Controller
                 'reporte_id' => 'required|exists:reportes,id',
                 'contenido' => 'required|string|max:1000',
                 'padre_id' => 'nullable|exists:comentarios,id',
-                'usuario_id' => 'required|exists:users,id'
+                'usuario_id' => 'required|exists:usuario,id'  // Cambiar 'users' a 'usuario'
             ]);
 
             // Log de datos validados

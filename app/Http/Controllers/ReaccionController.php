@@ -14,7 +14,7 @@ class ReaccionController extends Controller
             $request->validate([
                 'reporte_id' => 'required|exists:reportes,id',
                 'tipo_reaccion' => 'required|integer|min:1|max:5',
-                'usuario_id' => 'required|exists:users,id'
+                'usuario_id' => 'required|exists:usuario,id'
             ]);
 
             $reaccion = Reaccion::where('usuario_id', $request->usuario_id)

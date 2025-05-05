@@ -11,9 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('notificacions', function (Blueprint $table) {
+        Schema::create('notificaciones', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('usuario_id')->constrained('usuarios')->onDelete('cascade'); // Usuario que recibe la notificación
+            $table->foreignId('usuario_id')->constrained('usuario')->onDelete('cascade'); // Usuario que recibe la notificación
             $table->foreignId('reporte_id')->nullable()->constrained('reportes')->onDelete('cascade'); // Relacionada a un reporte (opcional)
             $table->string('titulo');
             $table->text('mensaje');

@@ -58,7 +58,7 @@ class ReportesController extends RestController
     public function crearReporte(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'usuario_id' => 'required|exists:users,id',
+            'usuario_id' => 'required|exists:usuario,id',
             'descripcion' => 'required|string',
             'ubicacion' => 'required',
             'imagen' => 'nullable|file|mimes:jpeg,png,jpg,gif|max:10240'

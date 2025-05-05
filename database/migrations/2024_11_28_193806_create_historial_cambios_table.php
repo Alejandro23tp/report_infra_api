@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('historial_cambios', function (Blueprint $table) {
             $table->id();
             $table->foreignId('reporte_id')->constrained('reportes')->onDelete('cascade'); // Reporte al que se refiere el historial
-            $table->foreignId('usuario_id')->constrained('usuarios')->onDelete('cascade'); // Usuario que hizo el cambio
+            $table->foreignId('usuario_id')->constrained('usuario')->onDelete('cascade'); // Usuario que hizo el cambio
             $table->string('estado_anterior');
             $table->string('estado_nuevo');
             $table->timestamps();

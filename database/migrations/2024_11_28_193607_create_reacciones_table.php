@@ -17,7 +17,7 @@ return new class extends Migration
             
             $table->foreign('usuario_id')
                 ->references('id')
-                ->on('users')
+                ->on('usuario')
                 ->onDelete('cascade');
                 
             $table->foreign('reporte_id')

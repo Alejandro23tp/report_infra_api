@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('usuario_id')
                   ->references('id')
-                  ->on('users')  // Referencia a la tabla 'users'
+                  ->on('usuario')  // Referencia a la tabla 'users'
                   ->onDelete('cascade');
             $table->foreignId('categoria_id')
                   ->nullable()

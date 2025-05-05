@@ -13,11 +13,11 @@ class UserController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'nombre' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
+            'email' => 'required|string|email|max:255|unique:usuario',  // Cambiar 'users' a 'usuario'
             'password' => 'required|string|min:6',
-            'cedula' => 'required|string|unique:users',
+            'cedula' => 'required|string|unique:usuario',  // Cambiar 'users' a 'usuario'
             'direccion' => 'required|string',
-            'rol' => 'required|string|in:admin,user'
+            'rol' => 'required|string|in:admin,usuario'  // Cambiar 'user' a 'usuario'
         ]);
 
         if($validator->fails()){

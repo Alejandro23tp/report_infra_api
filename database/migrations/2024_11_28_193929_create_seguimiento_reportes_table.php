@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('seguimiento_reportes', function (Blueprint $table) {
             $table->id();
             $table->foreignId('reporte_id')->constrained('reportes')->onDelete('cascade'); // Reporte asociado
-            $table->foreignId('usuario_id')->constrained('usuarios')->onDelete('cascade'); // Trabajador del GAD responsable
+            $table->foreignId('usuario_id')->constrained('usuario')->onDelete('cascade'); // Trabajador del GAD responsable
             $table->text('comentario'); // Detalle del seguimiento (e.g., acciones realizadas)
             $table->timestamps();
         });
