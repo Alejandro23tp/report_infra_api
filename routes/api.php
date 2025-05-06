@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\ComentarioController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\ReaccionController;
@@ -20,6 +21,9 @@ Route::group([
     Route::post('refresh', [LoginController::class, 'refresh']);
     Route::post('register', [UserController::class, 'register']);
 });
+
+Route::post('password/email', [PasswordResetController::class, 'sendResetLink']);
+Route::post('password/reset', [PasswordResetController::class, 'reset']);
 
 Route::get('/user', function (Request $request) {
     return $request->user();
