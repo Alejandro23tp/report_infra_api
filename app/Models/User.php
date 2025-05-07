@@ -32,6 +32,7 @@ class User extends Authenticatable implements JWTSubject
         'cedula',
         'direccion',
         'rol',
+        'fcm_token',  // Agregamos fcm_token
     ];
 
     /**

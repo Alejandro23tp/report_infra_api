@@ -2,12 +2,15 @@
 
 use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\ComentarioController;
+use App\Http\Controllers\FCMController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\ReaccionController;
 use App\Http\Controllers\UserController;
+use App\Models\User;  // Agregar este import
 use App\Rest\Controllers\CategoriasController;
 use App\Rest\Controllers\ReportesController;
 use App\Rest\Controllers\UsuariosController;
+use App\Services\FCMService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Lomkit\Rest\Facades\Rest;
@@ -61,4 +64,46 @@ Route::prefix('comentarios')->group(function () {
     Route::get('/principales/{reporteId}', [ComentarioController::class, 'getComentariosPrincipales']);
     Route::get('/respuestas/{comentarioId}', [ComentarioController::class, 'getRespuestasComentario']);
     Route::delete('/{id}', [ComentarioController::class, 'destroy']);
+});
+
+//Notificaciones
+Route::middleware('auth:api')->post('/subscribe', [FCMController::class, 'subscribe']);
+
+//test
+Route::get('/test-fcm', function () {
+    $fcmService = new FCMService();
+    
+    try {
+        info('Iniciando prueba de FCM');
+        
+        $user = User::whereNotNull('fcm_token')
+                    ->where('fcm_token', '!=', '')
+                    ->first();
+        
+        if (!$user) {
+            return response()->json(['error' => 'No hay usuarios con token FCM'], 404);
+        }
+        
+        // Agregar datos adicionales para tracking
+        $messageId = uniqid('fcm_');
+        $result = $fcmService->sendNotification(
+            $user->fcm_token,
+            'Prueba',
+            'Notificación de prueba desde Laravel ' . $messageId
+        );
+        
+        info('Enviando notificación con ID: ' . $messageId);
+        info('Token FCM usado: ' . $user->fcm_token);
+        info('Resultado del envío: ' . json_encode($result));
+        
+        return response()->json([
+            'success' => $result,
+            'messageId' => $messageId,
+            'token' => $user->fcm_token,
+            'user_id' => $user->id
+        ]);
+    } catch (\Exception $e) {
+        info('Error al enviar notificación: ' . $e->getMessage());
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
 });
