@@ -16,12 +16,13 @@ class FCMService
         $this->messaging = $factory->createMessaging();
     }
 
-    public function sendNotification($token, $title, $body)
+    public function sendNotification($token, $title, $body, $messageId = null)
     {
         $message = CloudMessage::withTarget('token', $token)
-            ->withNotification([
+            ->withData([
                 'title' => $title,
                 'body' => $body,
+                'messageId' => $messageId ?? uniqid('fcm_')
             ]);
 
         try {

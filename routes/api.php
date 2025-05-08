@@ -84,12 +84,12 @@ Route::get('/test-fcm', function () {
             return response()->json(['error' => 'No hay usuarios con token FCM'], 404);
         }
         
-        // Agregar datos adicionales para tracking
         $messageId = uniqid('fcm_');
         $result = $fcmService->sendNotification(
             $user->fcm_token,
             'Prueba',
-            'Notificación de prueba desde Laravel ' . $messageId
+            'Notificación de prueba desde Laravel ' . $messageId,
+            $messageId
         );
         
         info('Enviando notificación con ID: ' . $messageId);
