@@ -7,9 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class Notificacion extends Model
 {
-    //
-
     use HasFactory;
+
+    protected $table = 'notificaciones';
 
     protected $fillable = [
         'usuario_id',
@@ -26,6 +26,6 @@ class Notificacion extends Model
 
     public function reporte()
     {
-        return $this->belongsTo(Reporte::class);
+        return $this->belongsTo(Reporte::class, 'reporte_id');
     }
 }

@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\User;
+use App\Services\FCMService;
+use Illuminate\Support\Facades\Log;
 
 class FCMController extends Controller
 {
@@ -56,6 +58,29 @@ class FCMController extends Controller
         } catch (\Exception $e) {
             info('Error updating FCM token: ' . $e->getMessage());
             return response()->json(['error' => 'Error al guardar el token'], 500);
+        }
+    }
+
+    public function test(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            if (!$user || !$user->fcm_token) {
+                return response()->json(['error' => 'Usuario no tiene token FCM'], 400);
+            }
+
+            $fcmService = new FCMService();
+            $result = $fcmService->testNotification($user->fcm_token);
+
+            return response()->json([
+                'success' => $result,
+                'token' => $user->fcm_token,
+                'message' => $result ? 'Notificación enviada' : 'Error al enviar notificación'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error en prueba FCM: ' . $e->getMessage());
+            return response()->json(['error' => 'Error interno'], 500);
         }
     }
 }

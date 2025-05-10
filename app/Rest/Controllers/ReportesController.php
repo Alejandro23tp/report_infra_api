@@ -3,6 +3,7 @@
 namespace App\Rest\Controllers;
 
 use App\Models\{Reporte, Categoria, User};
+use App\Services\NotificacionService;
 use App\Rest\Controller as RestController;
 use App\Rest\Resources\ReporteResource;
 use Google\Cloud\Vision\V1\ImageAnnotatorClient;
@@ -79,13 +80,19 @@ class ReportesController extends RestController
             // Crear reporte
             $reporte = $this->crearNuevoReporte($request, $categoriaData['id']);
 
-            // Procesar imagen si existe
             if ($request->hasFile('imagen')) {
                 $this->guardarImagenReporte($reporte, $request->file('imagen'));
             }
 
-            DB::commit();
+            // Intentar notificar de manera segura
+            try {
+                app(NotificacionService::class)->notificarNuevoReporte($reporte);
+            } catch (\Exception $e) {
+                Log::error('Error al notificar nuevo reporte: ' . $e->getMessage());
+            }
 
+            DB::commit();
+            
             return response()->json([
                 'mensaje' => 'Reporte creado con éxito',
                 'data' => new ReporteResource($reporte),
