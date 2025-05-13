@@ -22,20 +22,30 @@ class ReportesController extends RestController
     // Constantes para categorías y palabras clave
     protected const CATEGORIAS = [
         'Daños estructurales' => ['building damage', 'structural damage', 'wall damage', 'crack', 'broken structure'],
-        'Daños en redes de servicios' => ['utility damage', 'electrical damage', 'water leak', 'broken pipe'],
-        'Daños en infraestructuras de transporte' => ['road damage', 'pothole', 'broken pavement', 'bridge damage'],
-        'Daños causados por fenómenos naturales' => ['flood damage', 'storm damage', 'landslide', 'weather damage'],
-        'Daños en espacios públicos' => ['park damage', 'plaza damage', 'public space', 'bench damage'],
-        'Impacto ambiental asociado' => ['pollution', 'environmental damage', 'waste', 'contamination'],
+        'Daños en redes de servicios' => ['utility damage', 'electrical damage', 'water leak', 'broken pipe', 'puddle'],
+        'Daños en infraestructuras de transporte' => ['road damage', 'pothole', 'broken pavement', 'bridge damage', 'tar'],
+        'Daños causados por fenómenos naturales' => ['flood damage', 'storm damage', 'landslide', 'weather damage', 'wetland','rubble', 'earthquake', 'geological phenomenon'],
+        'Daños en espacios públicos' => ['park damage', 'plaza damage', 'public space', 'bench damage', 'Park'],
+        'Impacto ambiental asociado' => ['pollution', 'environmental damage', 'waste', 'contamination', 'puddle', 'wetland'],
         'Daños por conflictos humanos' => ['vandalism', 'graffiti', 'intentional damage', 'human caused']
     ];
 
-    protected const PALABRAS_CLAVE = [
-        'damage', 'broken', 'crack', 'deterioration', 'road', 'street', 'infrastructure',
-        'building', 'bridge', 'utility', 'pipe', 'concrete', 'asphalt', 'metal', 'erosion',
-        'corrosion', 'bench', 'sign', 'unsafe', 'hazard', 'risk', 'emergency', 'wall',
-        'structure', 'floor', 'ceiling', 'hole', 'leak', 'destruction', 'debris', 'problem',
-        'issue', 'maintenance', 'repair', 'fix', 'broken', 'damaged'
+    protected const PALABRAS_CLAVE_PRINCIPALES = [
+        'damage', 'broken', 'construction', 'infrastructure', 'repair',
+        'maintenance', 'pothole', 'leak', 'erosion', 'destruction',
+        'pollution', 'puddle', 'wetland', 'tar', 'rubble', 'earthquake', 'Public space', 'Park', 'geological phenomenon'
+    ];
+
+    protected const PALABRAS_CLAVE_CONTEXTO = [
+        'construction worker', 'workwear', 'hard hat', 'engineer',
+        'concrete', 'pipe', 'drainage', 'soil', 'tradesman',
+        'project', 'road', 'street', 'building', 'structure',
+        'puddle', 'wetland', 'tar', 'rubble', 'earthquake', 'Public space', 'Park', 'geological phenomenon'
+    ];
+
+    protected const PALABRAS_CLAVE_NEGATIVAS = [
+        'logo', 'symbol', 'graphic', 'art', 'design', 'game',
+        'toy', 'cartoon', 'drawing', 'illustration', 'text'
     ];
 
     /**
@@ -224,8 +234,22 @@ class ReportesController extends RestController
                 ];
             }
 
-            $descriptions = array_column($etiquetas, 'descripcion');
-            $esRelevante = $this->esImagenRelevante($descriptions);
+            $descriptions = array_map(function($etiqueta) {
+                return $etiqueta['descripcion'];
+            }, $etiquetas);
+
+            Log::info('Etiquetas detectadas:', $descriptions);
+
+            $esRelevante = $this->esImagenRelevante($etiquetas);
+            if (!$esRelevante) {
+                return [
+                    'success' => false,
+                    'message' => 'La imagen no parece mostrar daños en infraestructura urbana',
+                    'etiquetas' => $etiquetas,
+                    'error_tipo' => 'imagen_no_relevante'
+                ];
+            }
+
             $clasificacion = $this->clasificarCategoria($descriptions);
 
             $imageAnnotator->close();
@@ -253,16 +277,45 @@ class ReportesController extends RestController
 
     protected function esImagenRelevante($etiquetas)
     {
-        $contador = 0;
+        $puntajeTotal = 0;
+        $contienePalabrasPrincipales = false;
+        $contieneContexto = false;
+        $contienePalabrasNegativas = false;
+
         foreach ($etiquetas as $etiqueta) {
-            foreach (self::PALABRAS_CLAVE as $palabra) {
-                if (stripos($etiqueta, $palabra) !== false) {
-                    if (++$contador >= 2) return true;
+            $descripcion = is_array($etiqueta) ? strtolower($etiqueta['descripcion']) : strtolower($etiqueta);
+            $confianza = is_array($etiqueta) ? $etiqueta['confianza'] : 1.0;
+
+            // Verificar palabras negativas
+            foreach (self::PALABRAS_CLAVE_NEGATIVAS as $palabra) {
+                if (stripos($descripcion, $palabra) !== false && $confianza > 0.7) {
+                    $contienePalabrasNegativas = true;
+                    break 2;
+                }
+            }
+
+            // Verificar palabras principales
+            foreach (self::PALABRAS_CLAVE_PRINCIPALES as $palabra) {
+                if (stripos($descripcion, $palabra) !== false) {
+                    $contienePalabrasPrincipales = true;
+                    $puntajeTotal += ($confianza * 2);
+                    break;
+                }
+            }
+
+            // Verificar palabras de contexto
+            foreach (self::PALABRAS_CLAVE_CONTEXTO as $palabra) {
+                if (stripos($descripcion, $palabra) !== false) {
+                    $contieneContexto = true;
+                    $puntajeTotal += $confianza;
                     break;
                 }
             }
         }
-        return false;
+
+        return !$contienePalabrasNegativas && 
+               ($contienePalabrasPrincipales || $contieneContexto) && 
+               $puntajeTotal >= 1.0;
     }
 
     protected function clasificarCategoria($labels)
@@ -402,13 +455,17 @@ class ReportesController extends RestController
     {
         $ubicacion = $this->parsearUbicacion($request->ubicacion);
 
+        // Asegurar valores por defecto para estado y urgencia
+        $estado = $request->estado ?? 'pendiente'; // Valor por defecto explícito
+        $urgencia = $request->urgencia ?? 'normal'; // Valor por defecto explícito
+
         return Reporte::create([
             'usuario_id' => $request->usuario_id,
             'categoria_id' => $categoriaId,
             'descripcion' => $request->descripcion,
             'ubicacion' => json_encode($ubicacion),
-            'estado' => $request->estado ?? 'pendiente',
-            'urgencia' => $request->urgencia ?? 'normal'
+            'estado' => $estado,
+            'urgencia' => $urgencia
         ]);
     }
 
