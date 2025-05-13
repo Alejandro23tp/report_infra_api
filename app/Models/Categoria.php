@@ -11,6 +11,7 @@ class Categoria extends Model
 
     protected $fillable = [
         'nombre',
+        'es_autogenerada',
     ];
 
     // Relación con los reportes

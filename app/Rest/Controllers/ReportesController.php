@@ -94,7 +94,7 @@ class ReportesController extends RestController
                 : $this->obtenerCategoriaDefault();
 
             // Crear reporte
-            $reporte = $this->crearNuevoReporte($request, $categoriaData['id']);
+            $reporte = $this->crearNuevoReporte($request, $categoriaData);
 
             if ($request->hasFile('imagen')) {
                 $this->guardarImagenReporte($reporte, $request->file('imagen'));
@@ -409,15 +409,16 @@ class ReportesController extends RestController
     }
 
     protected function procesarCategoriaDesdeImagen($imagen)
-    {
-        $resultado = $this->analizarImagenConGoogle($imagen);
-        
-        if (!$resultado['success']) {
-            return $this->obtenerCategoriaDefault();
-        }
+{
+    $resultado = $this->analizarImagenConGoogle($imagen);
+    
+    if (!$resultado['success']) {
+        return $this->obtenerCategoriaDefault();
+    }
 
-        $categoria = $this->obtenerOCrearCategoria($resultado['categoria_sugerida']);
-        
+    $categoria = $this->obtenerOCrearCategoria($resultado['categoria_sugerida']);
+    
+        // Asegurar que se retorna la estructura completa
         return [
             'id' => $categoria->id,
             'info' => [
@@ -433,42 +434,115 @@ class ReportesController extends RestController
     protected function obtenerCategoriaDefault()
     {
         $categoria = $this->obtenerOCrearCategoria('Sin clasificar');
+        // Estructura completa requerida
         return [
             'id' => $categoria->id,
             'info' => [
                 'id' => $categoria->id,
                 'nombre' => $categoria->nombre,
-                'sugerida' => false
+                'sugerida' => false,
+                'confianza' => 0
             ]
         ];
     }
 
     protected function obtenerOCrearCategoria($nombre)
     {
+        // Asegurar formato consistente (primera letra mayúscula)
+        $nombre = ucfirst(strtolower(trim($nombre)));
+        
         return Categoria::firstOrCreate(
             ['nombre' => $nombre],
-            ['descripcion' => 'Categoría detectada automáticamente', 'activo' => true]
+            [
+                'descripcion' => 'Categoría detectada automáticamente', 
+                'activo' => true,
+                'es_autogenerada' => true // Campo nuevo para identificar
+            ]
         );
     }
 
-    protected function crearNuevoReporte(Request $request, $categoriaId)
+    protected function crearNuevoReporte(Request $request,  array $categoriaData)
     {
         $ubicacion = $this->parsearUbicacion($request->ubicacion);
 
         // Asegurar valores por defecto para estado y urgencia
         $estado = $request->estado ?? 'pendiente'; // Valor por defecto explícito
-        $urgencia = $request->urgencia ?? 'normal'; // Valor por defecto explícito
+            // Calcular urgencia automáticamente
+        $urgencia = $this->calcularUrgencia(
+            $categoriaData['id'],
+            $request->descripcion,
+            $ubicacion,
+            $categoriaData['info']['confianza'] ?? null
+        );
 
         return Reporte::create([
             'usuario_id' => $request->usuario_id,
-            'categoria_id' => $categoriaId,
+            'categoria_id' => $categoriaData['id'],
             'descripcion' => $request->descripcion,
             'ubicacion' => json_encode($ubicacion),
             'estado' => $estado,
-            'urgencia' => $urgencia
-        ]);
+            'urgencia' => $this->calcularUrgencia(
+            $categoriaData['id'],
+            $request->descripcion,
+            $ubicacion,
+            $categoriaData['info']['confianza'] ?? null
+        )
+    ]);
     }
 
+    protected function calcularUrgencia($categoriaId, $descripcion, $ubicacion, $confianza = null)
+{
+    $puntaje = 0;
+    $categoria = Categoria::findOrFail($categoriaId);
+
+    // 1. Puntaje por categoría
+    $puntaje += match($categoria->nombre) {
+        'Daños estructurales',
+        'Daños en redes de servicios',
+        'Daños causados por fenómenos naturales' => 3,
+        'Daños en infraestructuras de transporte',
+        'Impacto ambiental asociado',
+        'Daños por conflictos humanos' => 2,
+        default => 1
+    };
+
+    // 2. Puntaje por palabras clave en descripción
+    $palabrasClave = ['emergencia', 'urgente', 'peligro', 'colapso', 'fuego', 'accidente'];
+    foreach ($palabrasClave as $palabra) {
+        if (stripos($descripcion, $palabra) !== false) {
+            $puntaje += 2;
+            break;
+        }
+    }
+
+    // 3. Puntaje por confianza en análisis de imagen
+    if ($confianza >= 0.9) {
+        $puntaje += 2;
+    } elseif ($confianza >= 0.7) {
+        $puntaje += 1;
+    }
+
+    // 4. Puntaje por reportes recientes en la misma ubicación
+    $ubicacionStr = json_encode(['lat' => $ubicacion['lat'], 'lon' => $ubicacion['lon']]);
+    $reportesRecientes = Reporte::where('ubicacion', $ubicacionStr)
+        ->where('created_at', '>=', now()->subHours(12))
+        ->count();
+
+    if ($reportesRecientes >= 3) {
+        $puntaje += 3;
+    } elseif ($reportesRecientes >= 1) {
+        $puntaje += 1;
+    }
+
+    // Determinar nivel de urgencia
+    return match(true) {
+        $puntaje >= 6 => 'crítico',
+        $puntaje >= 4 => 'alto',
+        $puntaje >= 2 => 'medio',
+        default => 'bajo'
+    };
+}
+    
     protected function parsearUbicacion($ubicacion)
     {
         if (is_string($ubicacion)) $ubicacion = json_decode($ubicacion, true);

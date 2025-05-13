@@ -50,7 +50,8 @@ Route::post('reportes/actualizar/{id}', [ReportesController::class, 'actualizarE
 Route::get('reportes/ubicaciones/all', [ReportesController::class, 'getUbicaciones']);
 
 //CATEGORIAS
-Rest::resource('categorias', CategoriasController::class);
+//Rest::resource('categorias', CategoriasController::class);
+Route::post('categorias', [CategoriasController::class, 'store']);
 Route::get('categorias/all', [CategoriasController::class, 'index']);
 
 // Rutas para reacciones y comentarios (sin autenticación)

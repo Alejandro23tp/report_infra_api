@@ -24,7 +24,7 @@ return new class extends Migration
             $table->text('descripcion');
             $table->json('ubicacion');
             $table->enum('estado', ['pendiente', 'en_proceso', 'completado'])->default('pendiente');
-            $table->enum('urgencia', ['baja', 'normal', 'alta'])->default('normal');
+            $table->enum('urgencia', ['bajo', 'medio', 'alto', 'crítico'])->default('bajo');
             $table->string('imagen_url')->nullable();
             $table->timestamps();
         });
