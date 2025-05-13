@@ -6,7 +6,11 @@ use App\Models\{Reporte, Categoria, User};
 use App\Services\NotificacionService;
 use App\Rest\Controller as RestController;
 use App\Rest\Resources\ReporteResource;
-use Google\Cloud\Vision\V1\ImageAnnotatorClient;
+use Google\Cloud\Vision\V1\Client\ImageAnnotatorClient;
+use Google\Cloud\Vision\V1\Image;
+use Google\Cloud\Vision\V1\Feature;
+use Google\Cloud\Vision\V1\Feature\Type;
+use Google\Cloud\Vision\V1\AnnotateImageRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB, Log, Storage, Validator};
 
@@ -29,7 +33,9 @@ class ReportesController extends RestController
     protected const PALABRAS_CLAVE = [
         'damage', 'broken', 'crack', 'deterioration', 'road', 'street', 'infrastructure',
         'building', 'bridge', 'utility', 'pipe', 'concrete', 'asphalt', 'metal', 'erosion',
-        'corrosion', 'bench', 'sign', 'unsafe', 'hazard', 'risk', 'emergency'
+        'corrosion', 'bench', 'sign', 'unsafe', 'hazard', 'risk', 'emergency', 'wall',
+        'structure', 'floor', 'ceiling', 'hole', 'leak', 'destruction', 'debris', 'problem',
+        'issue', 'maintenance', 'repair', 'fix', 'broken', 'damaged'
     ];
 
     /**
@@ -180,35 +186,68 @@ class ReportesController extends RestController
 
     protected function analizarImagenConGoogle($imagen)
     {
-        $credentials = $this->obtenerCredencialesGoogle();
-        $imageAnnotator = new ImageAnnotatorClient(['credentials' => $credentials]);
-
         try {
-            $image = file_get_contents($imagen->getPathname());
-            $response = $imageAnnotator->labelDetection($image);
-            $etiquetas = array_map(fn($label) => $label->getDescription(), iterator_to_array($response->getLabelAnnotations()));
+            Log::info('Iniciando análisis de imagen');
+            $credentials = $this->obtenerCredencialesGoogle();
+            
+            $imageAnnotator = new ImageAnnotatorClient([
+                'credentials' => $credentials
+            ]);
 
-            if (!$this->esImagenRelevante($etiquetas)) {
-                return [
-                    'success' => false,
-                    'message' => 'La imagen no parece mostrar daños en infraestructura urbana',
-                    'etiquetas' => $etiquetas,
-                    'error_tipo' => 'imagen_no_relevante'
+            // Preparar imagen
+            $imageContent = file_get_contents($imagen->getPathname());
+            $image = new Image();
+            $image->setContent($imageContent);
+
+            // Configurar feature
+            $feature = new Feature();
+            $feature->setType(Type::LABEL_DETECTION);
+            $feature->setMaxResults(20);
+
+            // Crear request
+            $request = new AnnotateImageRequest();
+            $request->setImage($image);
+            $request->setFeatures([$feature]);
+
+            // Ejecutar análisis
+            $batchRequest = new \Google\Cloud\Vision\V1\BatchAnnotateImagesRequest();
+            $batchRequest->setRequests([$request]);
+            $response = $imageAnnotator->batchAnnotateImages($batchRequest);
+            $annotations = $response->getResponses()[0];
+
+            // Procesar etiquetas
+            $etiquetas = [];
+            foreach ($annotations->getLabelAnnotations() as $label) {
+                $etiquetas[] = [
+                    'descripcion' => $label->getDescription(),
+                    'confianza' => $label->getScore()
                 ];
             }
 
-            $clasificacion = $this->clasificarCategoria($etiquetas);
+            $descriptions = array_column($etiquetas, 'descripcion');
+            $esRelevante = $this->esImagenRelevante($descriptions);
+            $clasificacion = $this->clasificarCategoria($descriptions);
+
+            $imageAnnotator->close();
 
             return [
                 'success' => true,
                 'etiquetas' => $etiquetas,
+                'relevante' => $esRelevante,
                 'categoria_sugerida' => $clasificacion['categoria'],
                 'confianza' => $clasificacion['confianza'],
-                'detalles_clasificacion' => $clasificacion['puntajes'],
+                'puntajes_categorias' => $clasificacion['puntajes'],
                 'message' => 'Imagen analizada correctamente'
             ];
-        } finally {
-            $imageAnnotator->close();
+
+        } catch (\Exception $e) {
+            Log::error('Error Vision API: ' . $e->getMessage());
+            Log::error($e->getTraceAsString());
+            
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
         }
     }
 
@@ -229,24 +268,84 @@ class ReportesController extends RestController
     protected function clasificarCategoria($labels)
     {
         $puntajes = array_fill_keys(array_keys(self::CATEGORIAS), 0);
-
+        
         foreach ($labels as $label) {
+            $label = strtolower($label);
+            
             foreach (self::CATEGORIAS as $categoria => $keywords) {
+                // Puntaje base por cada etiqueta analizada
+                $maxPuntajeEtiqueta = 0;
+                
                 foreach ($keywords as $keyword) {
-                    if (stripos($label, $keyword) !== false) {
-                        $puntajes[$categoria]++;
-                        break;
+                    $keyword = strtolower($keyword);
+                    
+                    // Verificar coincidencia exacta
+                    if (strpos($label, $keyword) !== false) {
+                        $maxPuntajeEtiqueta = max($maxPuntajeEtiqueta, 1.0);
+                        continue;
                     }
+                    
+                    // Verificar palabras individuales
+                    $keywordWords = explode(' ', $keyword);
+                    $labelWords = explode(' ', $label);
+                    $wordsMatched = 0;
+                    
+                    foreach ($keywordWords as $word) {
+                        if (strlen($word) <= 3) continue; // Ignorar palabras muy cortas
+                        
+                        foreach ($labelWords as $labelWord) {
+                            similar_text($word, $labelWord, $similarity);
+                            if ($similarity > 80) { // Umbral de similitud más bajo
+                                $wordsMatched++;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if ($wordsMatched > 0) {
+                        $matchScore = $wordsMatched / count($keywordWords);
+                        $maxPuntajeEtiqueta = max($maxPuntajeEtiqueta, $matchScore);
+                    }
+                }
+                
+                // Acumular el mejor puntaje encontrado para esta etiqueta
+                if ($maxPuntajeEtiqueta > 0) {
+                    $puntajes[$categoria] += $maxPuntajeEtiqueta;
                 }
             }
         }
 
+        // Normalizar y filtrar puntajes
+        $maxPuntaje = max(array_sum($puntajes), 1);
+        array_walk($puntajes, function(&$puntaje) use ($maxPuntaje) {
+            $puntaje = $puntaje / $maxPuntaje;
+        });
+
+        // Filtrar categorías con puntaje mínimo más bajo
+        $puntajes = array_filter($puntajes, fn($score) => $score >= 0.15);
+        
+        if (empty($puntajes)) {
+            return [
+                'categoria' => 'Sin clasificar',
+                'confianza' => 0,
+                'puntajes' => []
+            ];
+        }
+
         arsort($puntajes);
+        
         return [
             'categoria' => key($puntajes),
-            'confianza' => current($puntajes) / count($labels),
+            'confianza' => current($puntajes),
             'puntajes' => $puntajes
         ];
+    }
+
+    protected function contarPalabrasComunes($texto1, $texto2)
+    {
+        $palabras1 = explode(' ', strtolower($texto1));
+        $palabras2 = explode(' ', strtolower($texto2));
+        return count(array_intersect($palabras1, $palabras2));
     }
 
     protected function obtenerCredencialesGoogle()

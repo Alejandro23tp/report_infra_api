@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "a338bb7cd0296c528b94cedb3d1ca932",
+    "content-hash": "22646b191df8d6bb4c26dc6ba91105e4",
     "packages": [
         {
             "name": "beste/clock",
@@ -1088,27 +1088,27 @@
         },
         {
             "name": "google/cloud-vision",
-            "version": "v1.10.1",
+            "version": "v2.0.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/googleapis/google-cloud-php-vision.git",
-                "reference": "330c8ef902475d436c521ab7655aded6886bc397"
+                "reference": "109e6345350772e7f4579cb43e12f37acc079bcd"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/googleapis/google-cloud-php-vision/zipball/330c8ef902475d436c521ab7655aded6886bc397",
-                "reference": "330c8ef902475d436c521ab7655aded6886bc397",
+                "url": "https://api.github.com/repos/googleapis/google-cloud-php-vision/zipball/109e6345350772e7f4579cb43e12f37acc079bcd",
+                "reference": "109e6345350772e7f4579cb43e12f37acc079bcd",
                 "shasum": ""
             },
             "require": {
-                "google/cloud-core": "^1.52.7",
-                "google/gax": "^1.34.0",
+                "google/cloud-core": "^1.57",
+                "google/gax": "^1.36.0",
                 "php": "^8.0"
             },
             "require-dev": {
                 "erusev/parsedown": "^1.6",
                 "google/cloud-storage": "^1.12",
-                "phpdocumentor/reflection": "^5.3.3",
+                "phpdocumentor/reflection": "^5.3.3||^6.0",
                 "phpdocumentor/reflection-docblock": "^5.3",
                 "phpspec/prophecy-phpunit": "^2.0",
                 "phpunit/phpunit": "^9.0",
@@ -1123,9 +1123,9 @@
             "extra": {
                 "component": {
                     "id": "cloud-vision",
-                    "target": "googleapis/google-cloud-php-vision.git",
                     "path": "Vision",
-                    "entry": "src/VisionClient.php"
+                    "entry": "src/VisionClient.php",
+                    "target": "googleapis/google-cloud-php-vision.git"
                 }
             },
             "autoload": {
@@ -1140,9 +1140,9 @@
             ],
             "description": "Cloud Vision Client for PHP",
             "support": {
-                "source": "https://github.com/googleapis/google-cloud-php-vision/tree/v1.10.1"
+                "source": "https://github.com/googleapis/google-cloud-php-vision/tree/v2.0.1"
             },
-            "time": "2024-11-06T21:50:43+00:00"
+            "time": "2025-05-09T21:18:44+00:00"
         },
         {
             "name": "google/common-protos",

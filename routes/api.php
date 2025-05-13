@@ -66,8 +66,20 @@ Route::prefix('comentarios')->group(function () {
     Route::delete('/{id}', [ComentarioController::class, 'destroy']);
 });
 
+// Notificaciones
+Route::group(['middleware' => ['api']], function () {
+    Route::options('/subscribe', function () {
+        return response()->noContent()
+            ->header('Access-Control-Allow-Origin', 'http://127.0.0.1:8080')
+            ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+            ->header('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, X-Token-Auth, Authorization')
+            ->header('Access-Control-Allow-Credentials', 'true');
+    });
+    
+    Route::post('/subscribe', [FCMController::class, 'subscribe'])->middleware('auth:api');
+});
 //Notificaciones
-Route::middleware('auth:api')->post('/subscribe', [FCMController::class, 'subscribe']);
+//Route::middleware('auth:api')->post('/subscribe', [FCMController::class, 'subscribe']);
 
 //test
 Route::get('/test-fcm', function () {
