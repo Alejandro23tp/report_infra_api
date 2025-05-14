@@ -23,7 +23,7 @@ return new class extends Migration
                   ->nullOnDelete();
             $table->text('descripcion');
             $table->json('ubicacion');
-            $table->enum('estado', ['pendiente', 'en_proceso', 'completado'])->default('pendiente');
+            $table->enum('estado', ['Pendiente', 'En Proceso', 'Completado', 'Cancelado'])->default('Pendiente');
             $table->enum('urgencia', ['bajo', 'medio', 'alto', 'crítico'])->default('bajo');
             $table->string('imagen_url')->nullable();
             $table->timestamps();

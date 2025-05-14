@@ -78,6 +78,7 @@ Route::group(['middleware' => ['api']], function () {
     });
     
     Route::post('/subscribe', [FCMController::class, 'subscribe'])->middleware('auth:api');
+    Route::get('/notificaciones/status', [FCMController::class, 'checkNotificationStatus'])->middleware('auth:api');
 });
 //Notificaciones
 //Route::middleware('auth:api')->post('/subscribe', [FCMController::class, 'subscribe']);

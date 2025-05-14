@@ -61,25 +61,21 @@ class FCMController extends Controller
         }
     }
 
-    public function test(Request $request)
+    public function checkNotificationStatus()
     {
         try {
             $user = Auth::user();
-            if (!$user || !$user->fcm_token) {
-                return response()->json(['error' => 'Usuario no tiene token FCM'], 400);
+            if (!$user) {
+                return response()->json(['error' => 'Usuario no autenticado'], 401);
             }
 
-            $fcmService = new FCMService();
-            $result = $fcmService->testNotification($user->fcm_token);
-
             return response()->json([
-                'success' => $result,
-                'token' => $user->fcm_token,
-                'message' => $result ? 'Notificación enviada' : 'Error al enviar notificación'
+                'notifications_enabled' => !empty($user->fcm_token),
+                'fcm_token' => $user->fcm_token ? true : false
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Error en prueba FCM: ' . $e->getMessage());
+            Log::error('Error verificando estado de notificaciones: ' . $e->getMessage());
             return response()->json(['error' => 'Error interno'], 500);
         }
     }

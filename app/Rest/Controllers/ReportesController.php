@@ -141,15 +141,43 @@ class ReportesController extends RestController
      */
     public function actualizarEstado(Request $request, $id)
     {
-        $reporte = Reporte::findOrFail($id);
-        $reporte->update([
-            'estado' => $request->estado
-        ]);
+        try {
+            $validator = Validator::make($request->all(), [
+                'estado' => 'required|string|in:Pendiente,En Proceso,Completado,Cancelado'
+            ]);
 
-        return response()->json([
-            'mensaje' => 'Estado del reporte actualizado',
-            'data' => new ReporteResource($reporte)
-        ]);
+            if ($validator->fails()) {
+                return $this->errorResponse($validator->errors(), 'Estado no válido', 422);
+            }
+
+            $reporte = Reporte::findOrFail($id);
+            $estadoAnterior = $reporte->estado;
+            $reporte->estado = $request->estado;
+            $reporte->save();
+
+            // Enviar notificación del cambio de estado
+            try {
+                app(NotificacionService::class)->notificarCambioEstado($reporte, $estadoAnterior);
+            } catch (\Exception $e) {
+                Log::error('Error al notificar cambio de estado: ' . $e->getMessage());
+            }
+
+            Log::info('Estado de reporte actualizado', [
+                'reporte_id' => $id,
+                'estado_anterior' => $estadoAnterior,
+                'estado_nuevo' => $request->estado
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'mensaje' => 'Estado del reporte actualizado',
+                'data' => new ReporteResource($reporte)
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error actualizando estado: ' . $e->getMessage());
+            return $this->errorResponse([], 'Error al actualizar el estado', 500);
+        }
     }
 
     /**
