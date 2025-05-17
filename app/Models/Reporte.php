@@ -13,7 +13,8 @@ class Reporte extends Model
         'ubicacion',
         'imagen_url',
         'estado',
-        'urgencia'
+        'urgencia',
+        'nota_admin'
     ];
 
     protected $casts = [

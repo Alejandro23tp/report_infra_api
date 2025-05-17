@@ -14,6 +14,8 @@ use App\Services\FCMService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Lomkit\Rest\Facades\Rest;
+// Importar el nuevo controlador de administrador
+use App\Http\Controllers\Admin\AdminController;
 
 Route::group([
     'middleware' => 'api',
@@ -120,4 +122,50 @@ Route::get('/test-fcm', function () {
         info('Error al enviar notificación: ' . $e->getMessage());
         return response()->json(['error' => $e->getMessage()], 500);
     }
+});
+
+// Grupo de rutas para administradores
+Route::group([
+    'middleware' => ['api', 'auth:api', 'admin'],
+    'prefix' => 'admin',
+], function () {
+    // Dashboard y estadísticas
+    Route::get('/dashboard', [AdminController::class, 'getDashboardStats']);
+    
+    // Gestión de usuarios
+    Route::get('/usuarios', [AdminController::class, 'listarUsuarios']);
+    Route::get('/usuarios/{id}', [AdminController::class, 'verUsuario']);
+    Route::put('/usuarios/{id}', [AdminController::class, 'actualizarUsuario']);
+    Route::delete('/usuarios/{id}', [AdminController::class, 'eliminarUsuario']);
+    Route::put('/usuarios/{id}/rol', [AdminController::class, 'cambiarRolUsuario']);
+    Route::put('/usuarios/{id}/estado', [AdminController::class, 'cambiarEstadoUsuario']);
+    
+    // Gestión de reportes
+    Route::get('/reportes', [AdminController::class, 'listarReportes']);
+    Route::get('/reportes/{id}', [AdminController::class, 'verReporte']);
+    Route::put('/reportes/{id}/estado', [AdminController::class, 'cambiarEstadoReporte']);
+    Route::put('/reportes/{id}/prioridad', [AdminController::class, 'cambiarPrioridadReporte']);
+    Route::post('/reportes/{id}/asignar', [AdminController::class, 'asignarReporte']);
+    Route::delete('/reportes/{id}', [AdminController::class, 'eliminarReporte']);
+    
+    // Gestión de categorías
+    Route::get('/categorias', [AdminController::class, 'listarCategorias']);
+    Route::post('/categorias', [AdminController::class, 'crearCategoria']);
+    Route::put('/categorias/{id}', [AdminController::class, 'actualizarCategoria']);
+    Route::delete('/categorias/{id}', [AdminController::class, 'eliminarCategoria']);
+    
+    // Gestión de comentarios
+    Route::get('/comentarios', [AdminController::class, 'listarComentarios']);
+    Route::delete('/comentarios/{id}', [AdminController::class, 'eliminarComentario']);
+    
+    // Notificaciones masivas
+    Route::post('/notificaciones/enviar', [AdminController::class, 'enviarNotificacionMasiva']);
+    
+    // Configuración del sistema
+    Route::get('/configuracion', [AdminController::class, 'obtenerConfiguracion']);
+    Route::put('/configuracion', [AdminController::class, 'actualizarConfiguracion']);
+    
+    // Exportación de datos
+    Route::get('/exportar/reportes', [AdminController::class, 'exportarReportes']);
+    Route::get('/exportar/usuarios', [AdminController::class, 'exportarUsuarios']);
 });

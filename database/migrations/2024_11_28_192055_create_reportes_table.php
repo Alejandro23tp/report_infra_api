@@ -26,6 +26,7 @@ return new class extends Migration
             $table->enum('estado', ['Pendiente', 'En Proceso', 'Completado', 'Cancelado'])->default('Pendiente');
             $table->enum('urgencia', ['bajo', 'medio', 'alto', 'crítico'])->default('bajo');
             $table->string('imagen_url')->nullable();
+            $table->string('nota_admin')->nullable();
             $table->timestamps();
         });
     }

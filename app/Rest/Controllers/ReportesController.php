@@ -489,12 +489,12 @@ class ReportesController extends RestController
         );
     }
 
-    protected function crearNuevoReporte(Request $request,  array $categoriaData)
+    protected function crearNuevoReporte(Request $request, array $categoriaData)
     {
         $ubicacion = $this->parsearUbicacion($request->ubicacion);
 
         // Asegurar valores por defecto para estado y urgencia
-        $estado = $request->estado ?? 'pendiente'; // Valor por defecto explícito
+        $estado = $request->estado ?? 'Pendiente'; // Valor por defecto explícito
             // Calcular urgencia automáticamente
         $urgencia = $this->calcularUrgencia(
             $categoriaData['id'],
@@ -509,13 +509,14 @@ class ReportesController extends RestController
             'descripcion' => $request->descripcion,
             'ubicacion' => json_encode($ubicacion),
             'estado' => $estado,
+            'nota_admin' => $request->nota_admin, // Agregar el campo nota_admin
             'urgencia' => $this->calcularUrgencia(
-            $categoriaData['id'],
-            $request->descripcion,
-            $ubicacion,
-            $categoriaData['info']['confianza'] ?? null
-        )
-    ]);
+                $categoriaData['id'],
+                $request->descripcion,
+                $ubicacion,
+                $categoriaData['info']['confianza'] ?? null
+            )
+        ]);
     }
 
     protected function calcularUrgencia($categoriaId, $descripcion, $ubicacion, $confianza = null)

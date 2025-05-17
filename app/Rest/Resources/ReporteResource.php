@@ -31,6 +31,7 @@ class ReporteResource extends RestResource
             'estado',
             'urgencia',
             'imagen_url',
+            'nota_admin',
         ];
     }
 
