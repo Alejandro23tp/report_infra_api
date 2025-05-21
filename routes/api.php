@@ -17,6 +17,15 @@ use Lomkit\Rest\Facades\Rest;
 // Importar el nuevo controlador de administrador
 use App\Http\Controllers\Admin\AdminController;
 
+// Configuración CORS para todas las rutas de la API
+Route::options('/{any}', function () {
+    return response()->noContent()
+        ->header('Access-Control-Allow-Origin', 'http://localhost:4200') // Cambia esto a tu origen Angular
+        ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        ->header('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, X-Token-Auth, Authorization')
+        ->header('Access-Control-Allow-Credentials', 'true');
+})->where('any', '.*');
+
 Route::group([
     'middleware' => 'api',
     'prefix' => 'auth',
@@ -70,17 +79,11 @@ Route::prefix('comentarios')->group(function () {
 });
 
 // Notificaciones
-Route::group(['middleware' => ['api']], function () {
-    Route::options('/subscribe', function () {
-        return response()->noContent()
-            ->header('Access-Control-Allow-Origin', 'http://127.0.0.1:8080')
-            ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-            ->header('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, X-Token-Auth, Authorization')
-            ->header('Access-Control-Allow-Credentials', 'true');
-    });
-    
+Route::group(['middleware' => ['api']], function () {    
     Route::post('/subscribe', [FCMController::class, 'subscribe'])->middleware('auth:api');
     Route::get('/notificaciones/status', [FCMController::class, 'checkNotificationStatus'])->middleware('auth:api');
+    Route::post('/unsubscribe', [FCMController::class, 'unsubscribe'])->middleware('auth:api');
+    Route::get('/lista-dispositivos', [FCMController::class, 'listDevices'])->middleware('auth:api');
 });
 //Notificaciones
 //Route::middleware('auth:api')->post('/subscribe', [FCMController::class, 'subscribe']);

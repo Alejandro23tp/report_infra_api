@@ -15,36 +15,45 @@ class NotificacionService
         $this->fcmService = $fcmService;
     }
 
+    /**
+     * Notifica a los usuarios sobre un nuevo reporte
+     */
     public function notificarNuevoReporte(Reporte $reporte)
     {
         try {
             Log::info('Iniciando notificación de nuevo reporte', ['reporte_id' => $reporte->id]);
 
             // Notificar al creador
-            $creador = User::find($reporte->usuario_id);
-            if ($creador && $creador->fcm_token) {
-                $messageId = uniqid('fcm_');
-                $this->fcmService->sendNotification(
-                    $creador->fcm_token,
+            if ($reporte->usuario_id) {
+                $this->fcmService->sendToUser(
+                    $reporte->usuario_id,
                     'Reporte Creado',
                     'Tu reporte ha sido creado exitosamente',
-                    $messageId
+                    'reporte_nuevo_' . $reporte->id
                 );
             }
 
             // Notificar a otros usuarios
             $otrosUsuarios = User::where('id', '!=', $reporte->usuario_id)
-                                ->whereNotNull('fcm_token')
-                                ->where('fcm_token', '!=', '')
+                                ->where('rol', 'usuario')
                                 ->get();
 
             foreach ($otrosUsuarios as $usuario) {
-                $messageId = uniqid('fcm_');
-                $this->fcmService->sendNotification(
-                    $usuario->fcm_token,
+                // Guardar la notificación en la base de datos
+                Notificacion::create([
+                    'usuario_id' => $usuario->id,
+                    'reporte_id' => $reporte->id,
+                    'titulo' => 'Nuevo Reporte en la Zona',
+                    'mensaje' => 'Se ha reportado un nuevo problema en tu área',
+                    'leido' => false
+                ]);
+                
+                // Enviar notificación push a todos los dispositivos del usuario
+                $this->fcmService->sendToUser(
+                    $usuario->id,
                     'Nuevo Reporte en la Zona',
                     'Se ha reportado un nuevo problema en tu área',
-                    $messageId
+                    'reporte_nuevo_' . $reporte->id
                 );
             }
 
@@ -55,7 +64,10 @@ class NotificacionService
         }
     }
 
-    public function notificarCambioEstado(Reporte $reporte, string $estadoAnterior)
+    /**
+     * Notifica a los usuarios sobre un cambio de estado en un reporte
+     */
+    public function notificarCambioEstado(Reporte $reporte, $estadoAnterior)
     {
         try {
             Log::info('Notificando cambio de estado', [
@@ -65,36 +77,28 @@ class NotificacionService
             ]);
 
             // Notificar al creador del reporte
-            $creador = User::find($reporte->usuario_id);
-            if ($creador && $creador->fcm_token) {
-                $messageId = uniqid('fcm_');
-                $this->fcmService->sendNotification(
-                    $creador->fcm_token,
-                    'Estado de Reporte Actualizado',
-                    "Tu reporte ha cambiado a estado: {$reporte->estado}",
-                    $messageId
-                );
-            }
-
-            // Notificar a otros usuarios cercanos
-            $otrosUsuarios = User::where('id', '!=', $reporte->usuario_id)
-                                ->whereNotNull('fcm_token')
-                                ->where('fcm_token', '!=', '')
-                                ->get();
-
-            foreach ($otrosUsuarios as $usuario) {
-                $messageId = uniqid('fcm_');
-                $this->fcmService->sendNotification(
-                    $usuario->fcm_token,
-                    'Actualización de Reporte Cercano',
-                    "Un reporte en tu área ha cambiado a estado: {$reporte->estado}",
-                    $messageId
+            if ($reporte->usuario_id) {
+                // Guardar notificación en BD
+                Notificacion::create([
+                    'usuario_id' => $reporte->usuario_id,
+                    'reporte_id' => $reporte->id,
+                    'titulo' => 'Actualización de Estado',
+                    'mensaje' => "Tu reporte ha cambiado de estado: $estadoAnterior → {$reporte->estado}",
+                    'leido' => false
+                ]);
+                
+                // Enviar notificación push a todos los dispositivos del usuario
+                $this->fcmService->sendToUser(
+                    $reporte->usuario_id,
+                    'Actualización de Estado',
+                    "Tu reporte ha cambiado de estado: $estadoAnterior → {$reporte->estado}",
+                    'reporte_estado_' . $reporte->id
                 );
             }
 
             return true;
         } catch (\Exception $e) {
-            Log::error('Error en notificación de cambio de estado: ' . $e->getMessage());
+            Log::error('Error notificando cambio de estado: ' . $e->getMessage());
             return false;
         }
     }

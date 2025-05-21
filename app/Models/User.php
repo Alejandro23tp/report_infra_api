@@ -31,8 +31,7 @@ class User extends Authenticatable implements JWTSubject
         'password',
         'cedula',
         'direccion',
-        'rol',
-        'fcm_token',  // Agregamos fcm_token
+        'rol'
     ];
 
     /**
@@ -107,5 +106,12 @@ class User extends Authenticatable implements JWTSubject
     {
         return $this->hasMany(Reporte::class, 'usuario_id');  // Cambiar 'user_id' a 'usuario_id'
     }
+
+    // En el modelo User, agregar la relación
+    public function dispositivosTokens()
+    {
+        return $this->hasMany(DispositivosToken::class, 'usuario_id');
+    }
+    
 }
 

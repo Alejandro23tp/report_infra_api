@@ -100,7 +100,7 @@ class ReportesController extends RestController
                 $this->guardarImagenReporte($reporte, $request->file('imagen'));
             }
 
-            // Intentar notificar de manera segura
+            // Intentar notificar de manera segura usando el servicio de notificaciones
             try {
                 app(NotificacionService::class)->notificarNuevoReporte($reporte);
             } catch (\Exception $e) {
