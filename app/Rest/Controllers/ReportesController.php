@@ -2,7 +2,7 @@
 
 namespace App\Rest\Controllers;
 
-use App\Models\{Reporte, Categoria, User};
+use App\Models\{Reporte, Categoria, User, Reaccion, Comentario};
 use App\Services\NotificacionService;
 use App\Rest\Controller as RestController;
 use App\Rest\Resources\ReporteResource;
@@ -134,6 +134,176 @@ class ReportesController extends RestController
             'mensaje' => 'Reportes obtenidos',
             'data' => $reportes
         ]);
+    }
+
+    /**
+     * Listar reportes con paginación, reacciones (incluyendo usuarios) y conteo de comentarios
+     */
+    public function listarReportesConInteracciones(Request $request)
+    {
+        try {
+            // Validar parámetros de paginación
+            $perPage = min((int)$request->input('per_page', 10), 50); // Máximo 50 por página
+            $page = max(1, (int)$request->input('page', 1));
+            
+            // Obtener ID del usuario autenticado si existe
+            $usuarioAutenticadoId = auth()->check() ? auth()->id() : null;
+    
+            // Obtener reportes con paginación
+            $reportes = Reporte::with(['usuario:id,nombre,email,cedula', 'categoria:id,nombre'])
+                ->orderBy('created_at', 'desc')
+                ->paginate($perPage, ['*'], 'page', $page);
+    
+            // Si no hay reportes, devolver respuesta vacía
+            if ($reportes->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'mensaje' => 'No hay reportes disponibles',
+                    'data' => [],
+                    'pagination' => [
+                        'total' => 0,
+                        'per_page' => $perPage,
+                        'current_page' => $page,
+                        'last_page' => 1,
+                        'from' => null,
+                        'to' => null,
+                        'next_page_url' => null,
+                        'prev_page_url' => null,
+                    ]
+                ]);
+            }
+    
+            // Obtener todos los IDs de reportes para cargar reacciones y comentarios de una sola vez
+            $reporteIds = $reportes->pluck('id');
+            
+            // Cargar todas las reacciones para estos reportes
+            $reacciones = Reaccion::whereIn('reporte_id', $reporteIds)
+                ->with(['usuario' => function($query) {
+                    $query->select('id', 'nombre', 'email', 'cedula');
+                }])
+                ->get()
+                ->groupBy('reporte_id');
+                
+            // Cargar todos los comentarios principales para estos reportes con sus respuestas
+            $comentariosPrincipales = Comentario::whereIn('reporte_id', $reporteIds)
+                ->whereNull('padre_id')
+                ->with(['usuario:id,nombre,email,cedula', 
+                        'respuestas' => function($query) {
+                            $query->with('usuario:id,nombre,email,cedula')
+                                ->orderBy('created_at', 'asc');
+                        }])
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->groupBy('reporte_id');
+    
+            // Procesar cada reporte
+            $reportes->getCollection()->transform(function ($reporte) use ($reacciones, $usuarioAutenticadoId, $comentariosPrincipales) {
+                $reaccionesReporte = $reacciones->get($reporte->id, collect());
+                
+                // Inicializar estructuras para reacciones
+                $reaccionesAgrupadas = [];
+                $reaccionesContador = [];
+                $usuarioHaReaccionado = false;
+                $tipoReaccionUsuario = null;
+    
+                // Procesar reacciones
+                foreach ($reaccionesReporte as $reaccion) {
+                    $tipo = (string)$reaccion->tipo_reaccion;
+                    
+                    // Inicializar arrays si no existen
+                    if (!isset($reaccionesAgrupadas[$tipo])) {
+                        $reaccionesAgrupadas[$tipo] = [];
+                        $reaccionesContador[$tipo] = 0;
+                    }
+                    
+                    // Agregar usuario a las reacciones agrupadas
+                    if ($reaccion->usuario) {
+                        $reaccionesAgrupadas[$tipo][] = [
+                            'id' => $reaccion->usuario->id,
+                            'nombre' => $reaccion->usuario->nombre,
+                            'email' => $reaccion->usuario->email,
+                            'cedula' => $reaccion->usuario->cedula
+                        ];
+                    }
+                    
+                    // Contar reacciones por tipo
+                    $reaccionesContador[$tipo]++;
+                    
+                    // Verificar si el usuario autenticado ha reaccionado
+                    if ($usuarioAutenticadoId && $reaccion->usuario_id === $usuarioAutenticadoId) {
+                        $usuarioHaReaccionado = true;
+                        $tipoReaccionUsuario = (int)$tipo;
+                    }
+                }
+    
+                // Obtener comentarios principales para este reporte
+                $comentarios = $comentariosPrincipales->get($reporte->id, collect())
+                    ->map(function($comentario) {
+                        return [
+                            'id' => $comentario->id,
+                            'contenido' => $comentario->contenido,
+                            'fecha_creacion' => $comentario->created_at->format('Y-m-d H:i:s'),
+                            'usuario' => [
+                                'id' => $comentario->usuario->id,
+                                'nombre' => $comentario->usuario->nombre,
+                                'email' => $comentario->usuario->email,
+                                'cedula' => $comentario->usuario->cedula
+                            ],
+                            'respuestas' => $comentario->respuestas->map(function($respuesta) {
+                                return [
+                                    'id' => $respuesta->id,
+                                    'contenido' => $respuesta->contenido,
+                                    'fecha_creacion' => $respuesta->created_at->format('Y-m-d H:i:s'),
+                                    'usuario' => [
+                                        'id' => $respuesta->usuario->id,
+                                        'nombre' => $respuesta->usuario->nombre,
+                                        'email' => $respuesta->usuario->email,
+                                        'cedula' => $respuesta->usuario->cedula
+                                    ]
+                                ];
+                            })->toArray()
+                        ];
+                    });
+    
+                // Agregar los datos al reporte
+                $reporte->reacciones = [
+                    'contadores' => $reaccionesContador,
+                    'usuarios_por_tipo' => $reaccionesAgrupadas,
+                    'usuario_ha_reaccionado' => $usuarioHaReaccionado,
+                    'tipo_reaccion_usuario' => $tipoReaccionUsuario
+                ];
+                
+                $reporte->total_comentarios = $comentarios->count();
+                $reporte->comentarios = $comentarios;
+    
+                return $reporte;
+            });
+    
+            return response()->json([
+                'success' => true,
+                'mensaje' => 'Reportes obtenidos con interacciones',
+                'data' => $reportes->items(),
+                'pagination' => [
+                    'total' => $reportes->total(),
+                    'per_page' => $reportes->perPage(),
+                    'current_page' => $reportes->currentPage(),
+                    'last_page' => $reportes->lastPage(),
+                    'from' => $reportes->firstItem(),
+                    'to' => $reportes->lastItem(),
+                    'next_page_url' => $reportes->nextPageUrl(),
+                    'prev_page_url' => $reportes->previousPageUrl(),
+                ]
+            ]);
+    
+        } catch (\Exception $e) {
+            Log::error('Error al obtener reportes con interacciones: ' . $e->getMessage());
+            Log::error($e->getTraceAsString());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener los reportes con interacciones',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
     }
 
     /**

@@ -51,6 +51,7 @@ Route::get('usuarios/all', [UsuariosController::class, 'listarTodos']);
 // Rutas para reportes
 Rest::resource('reportes', ReportesController::class);
 Route::get('reportes/all', [ReportesController::class, 'listarReportes']);
+Route::get('reportes/con-interacciones', [ReportesController::class, 'listarReportesConInteracciones']);
 Route::post('reportes/analizar-imagen', [ReportesController::class, 'analizarImagen']);
 Route::post('reportes/crear', [ReportesController::class, 'crearReporte']);
 
@@ -163,10 +164,6 @@ Route::group([
     
     // Notificaciones masivas
     Route::post('/notificaciones/enviar', [AdminController::class, 'enviarNotificacionMasiva']);
-    
-    // Configuración del sistema
-    Route::get('/configuracion', [AdminController::class, 'obtenerConfiguracion']);
-    Route::put('/configuracion', [AdminController::class, 'actualizarConfiguracion']);
     
     // Exportación de datos
     Route::get('/exportar/reportes', [AdminController::class, 'exportarReportes']);
