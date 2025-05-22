@@ -28,23 +28,26 @@ class NotificacionService
                 $this->fcmService->sendToUser(
                     $reporte->usuario_id,
                     'Reporte Creado',
-                    'Tu reporte ha sido creado exitosamente',
+                    'Tu reporte ha sido creado exitosamente. Nivel de urgencia: ' . ucfirst($reporte->urgencia),
                     'reporte_nuevo_' . $reporte->id
                 );
             }
 
-            // Notificar a otros usuarios
+            // Notificar a otros usuarios (tanto usuarios como administradores)
             $otrosUsuarios = User::where('id', '!=', $reporte->usuario_id)
-                                ->where('rol', 'usuario')
+                                ->whereIn('rol', ['usuario', 'administrador'])
                                 ->get();
 
             foreach ($otrosUsuarios as $usuario) {
                 // Guardar la notificación en la base de datos
+                $mensaje = 'Se ha reportado un nuevo problema en tu área';
+                $mensajeUrgencia = 'Nivel de urgencia: ' . ucfirst($reporte->urgencia);
+                
                 Notificacion::create([
                     'usuario_id' => $usuario->id,
                     'reporte_id' => $reporte->id,
                     'titulo' => 'Nuevo Reporte en la Zona',
-                    'mensaje' => 'Se ha reportado un nuevo problema en tu área',
+                    'mensaje' => "$mensaje. $mensajeUrgencia.",
                     'leido' => false
                 ]);
                 
@@ -52,7 +55,7 @@ class NotificacionService
                 $this->fcmService->sendToUser(
                     $usuario->id,
                     'Nuevo Reporte en la Zona',
-                    'Se ha reportado un nuevo problema en tu área',
+                    "$mensaje. $mensajeUrgencia.",
                     'reporte_nuevo_' . $reporte->id
                 );
             }
