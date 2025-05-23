@@ -86,12 +86,24 @@ class AdminController extends Controller
             $query->where('rol', $request->rol);
         }
         
-        if ($request->has('buscar')) {
-            $buscar = $request->buscar;
-            $query->where(function($q) use ($buscar) {
-                $q->where('nombre', 'like', "%{$buscar}%")
-                  ->orWhere('email', 'like', "%{$buscar}%")
-                  ->orWhere('cedula', 'like', "%{$buscar}%");
+        // Filtro por estado activo/inactivo
+        if ($request->has('activo') && $request->activo !== '') {
+            $query->where('activo', $request->activo);
+        }
+        
+        // Búsqueda por id, nombre o cédula
+        if ($request->has('search') && !empty($request->search)) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                // Buscar por ID si el search es numérico
+                if (is_numeric($search)) {
+                    $q->where('id', $search);
+                }
+                
+                // Buscar por nombre, cédula o email
+                $q->orWhere('nombre', 'like', "%{$search}%")
+                  ->orWhere('cedula', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%");
             });
         }
         
@@ -125,7 +137,7 @@ class AdminController extends Controller
         
         $validator = Validator::make($request->all(), [
             'nombre' => 'sometimes|string|max:255',
-            'email' => 'sometimes|string|email|max:255|unique:users,email,' . $id,
+            'email' => 'sometimes|string|email|max:255|unique:usuario,email,' . $id,
             'direccion' => 'sometimes|string|max:255',
             'activo' => 'sometimes|boolean',
         ]);
@@ -553,8 +565,8 @@ class AdminController extends Controller
             'titulo' => 'required|string|max:255',
             'mensaje' => 'required|string',
             'usuarios' => 'sometimes|array',
-            'usuarios.*' => 'exists:users,id',
-            'rol' => 'sometimes|string|in:admin,usuario,moderador',
+            'usuarios.*' => 'exists:usuario,id',
+            'rol' => 'sometimes|string|in:administrador,usuario,moderador',
             'todos' => 'sometimes|boolean',
         ]);
         
