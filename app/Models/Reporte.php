@@ -5,9 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\Reaccion;
+use App\Traits\TracksReportChanges;
 
 class Reporte extends Model
 {
+    use TracksReportChanges;
+    
     protected $fillable = [
         'usuario_id',
         'categoria_id',
@@ -16,18 +19,46 @@ class Reporte extends Model
         'imagen_url',
         'estado',
         'urgencia',
-        'nota_admin'
+        'nota_admin',
+        'asignado_a'
     ];
 
     protected $casts = [
-        'ubicacion' => 'array'
+        'ubicacion' => 'array',
+        'created_at' => 'datetime:Y-m-d H:i:s',
+        'updated_at' => 'datetime:Y-m-d H:i:s'
     ];
+    
+    /**
+     * Prepara una fecha para la serialización de arrays / JSON.
+     *
+     * @param  \DateTimeInterface  $date
+     * @return string
+     */
+    protected function serializeDate(\DateTimeInterface $date)
+    {
+        return $date->format('Y-m-d H:i:s');
+    }
 
+    /**
+     * Obtiene el usuario que creó el reporte.
+     */
     public function usuario()
     {
         return $this->belongsTo(User::class, 'usuario_id');
     }
+    
+    /**
+     * Obtiene el usuario al que está asignado el reporte.
+     */
+    public function asignadoA()
+    {
+        return $this->belongsTo(User::class, 'asignado_a');
+    }
 
+    /**
+     * Obtiene la categoría del reporte.
+     */
     public function categoria()
     {
         return $this->belongsTo(Categoria::class);
@@ -56,5 +87,14 @@ class Reporte extends Model
     public function todosLosComentarios(): HasMany
     {
         return $this->hasMany(Comentario::class, 'reporte_id');
+    }
+    
+    /**
+     * Obtiene el historial de cambios del reporte.
+     */
+    public function historial()
+    {
+        return $this->hasMany(SeguimientoReporte::class, 'reporte_id')
+            ->orderBy('created_at', 'desc');
     }
 }

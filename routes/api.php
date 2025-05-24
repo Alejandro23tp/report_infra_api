@@ -63,8 +63,8 @@ Route::get('reportes/ubicaciones/all', [ReportesController::class, 'getUbicacion
 
 //CATEGORIAS
 //Rest::resource('categorias', CategoriasController::class);
-//Route::post('categorias', [CategoriasController::class, 'store']);
-//Route::get('categorias/all', [CategoriasController::class, 'index']);
+Route::post('categorias', [CategoriasController::class, 'store']);
+Route::get('categorias/all', [CategoriasController::class, 'index']);
 
 // Rutas para reacciones y comentarios (sin autenticación)
 Route::post('/reacciones/toggle', [ReaccionController::class, 'toggle']);
@@ -153,10 +153,10 @@ Route::group([
     Route::delete('/reportes/{id}', [AdminController::class, 'eliminarReporte']);
     
     // Gestión de categorías
-    Route::post('categorias', [CategoriasController::class, 'store']);
-    Route::get('categorias/all', [CategoriasController::class, 'index']);
-    //Route::get('/categorias', [AdminController::class, 'listarCategorias']);
-    //Route::post('/categorias', [AdminController::class, 'crearCategoria']);
+    //Route::post('/categorias', [CategoriasController::class, 'store']);
+    //Route::get('/categorias/all', [CategoriasController::class, 'index']);
+    Route::get('/categorias', [AdminController::class, 'listarCategorias']);
+    Route::post('/categorias', [AdminController::class, 'crearCategoria']);
     Route::put('/categorias/{id}', [AdminController::class, 'actualizarCategoria']);
     Route::delete('/categorias/{id}', [AdminController::class, 'eliminarCategoria']);
     
@@ -170,4 +170,10 @@ Route::group([
     // Exportación de datos
     Route::get('/exportar/reportes', [AdminController::class, 'exportarReportes']);
     Route::get('/exportar/usuarios', [AdminController::class, 'exportarUsuarios']);
+    
+    // Historial de reportes
+    Route::prefix('reportes/{reporte}/historial')->group(function () {
+        Route::get('/', [\App\Http\Controllers\ReporteHistorialController::class, 'index']);
+        Route::post('/comentario', [\App\Http\Controllers\ReporteHistorialController::class, 'agregarComentario']);
+    });
 });

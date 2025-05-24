@@ -13,10 +13,14 @@ return new class extends Migration
     {
         Schema::create('seguimiento_reportes', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('reporte_id')->constrained('reportes')->onDelete('cascade'); // Reporte asociado
-            $table->foreignId('usuario_id')->constrained('usuario')->onDelete('cascade'); // Trabajador del GAD responsable
-            $table->text('comentario'); // Detalle del seguimiento (e.g., acciones realizadas)
+            $table->foreignId('reporte_id')->constrained('reportes')->onDelete('cascade');
+            $table->foreignId('usuario_id')->constrained('usuario')->onDelete('cascade');
+            $table->string('tipo', 50)->default('seguimiento'); // Tipo de seguimiento: 'cambio_estado', 'asignacion', 'comentario', etc.
+            $table->text('comentario')->nullable(); // Detalle del seguimiento o cambios realizados (en formato JSON para cambios)
             $table->timestamps();
+            
+            // Índices para mejorar el rendimiento de las consultas
+            $table->index(['reporte_id', 'created_at']);
         });
     }
 

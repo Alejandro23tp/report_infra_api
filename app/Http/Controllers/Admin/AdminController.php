@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\DispositivosToken;
 use App\Models\User;
 use App\Models\Reporte;
 use App\Models\Categoria;
@@ -21,6 +22,59 @@ class AdminController extends Controller
     public function __construct(FCMService $fcmService)
     {
         $this->fcmService = $fcmService;
+    }
+    
+    /**
+     * Envía notificaciones a todos los usuarios sobre un cambio en un reporte
+     */
+    private function notificarCambioReporte(Reporte $reporte, string $tipo, string $tituloBase, string $mensajeBase, array $datosAdicionales = [])
+    {
+        // Obtener todos los usuarios activos con sus dispositivos
+        $usuarios = User::where('activo', true)
+            ->whereHas('dispositivos')
+            ->with('dispositivos')
+            ->get();
+            
+        // Preparar la descripción (mostrar solo los primeros 50 caracteres si es muy larga)
+        $descripcion = strlen($reporte->descripcion) > 50 
+            ? substr($reporte->descripcion, 0, 50) . '...' 
+            : $reporte->descripcion;
+            
+        // Enviar notificación a todos los usuarios con dispositivos registrados
+        foreach ($usuarios as $usuario) {
+            $esCreador = $usuario->id === $reporte->usuario_id;
+            
+            // Personalizar el mensaje para el creador
+            $titulo = $esCreador 
+                ? "Tu reporte: {$tituloBase}" 
+                : $tituloBase;
+                
+            $mensaje = $esCreador 
+                ? "Tu reporte \"{$descripcion}\" {$mensajeBase}" 
+                : "El reporte \"{$descripcion}\" {$mensajeBase}";
+            
+            foreach ($usuario->dispositivos as $dispositivo) {
+                try {
+                    $this->fcmService->sendNotification(
+                        $dispositivo->fcm_token,
+                        $titulo,
+                        $mensaje,
+                        'reporte_' . $reporte->id,
+                        array_merge([
+                            'tipo' => $tipo,
+                            'reporte_id' => $reporte->id,
+                            'es_creador' => $esCreador
+                        ], $datosAdicionales)
+                    );
+                } catch (\Exception $e) {
+                    Log::error('Error enviando notificación a dispositivo: ' . $e->getMessage(), [
+                        'usuario_id' => $usuario->id,
+                        'dispositivo_id' => $dispositivo->id,
+                        'reporte_id' => $reporte->id
+                    ]);
+                }
+            }
+        }
     }
     
     /**
@@ -224,7 +278,11 @@ class AdminController extends Controller
      */
     public function listarReportes(Request $request)
     {
-        $query = Reporte::with(['usuario', 'categoria']);
+        $query = Reporte::with([
+            'usuario:id,nombre,email,cedula', 
+            'categoria:id,nombre',
+            'asignadoA:id,nombre,email,cedula'
+        ]);
         
         // Aplicar filtros
         if ($request->has('estado')) {
@@ -239,10 +297,20 @@ class AdminController extends Controller
             $query->where('urgencia', $request->urgencia);
         }
         
+        // Filtrar por usuario asignado
+        if ($request->has('asignado_a')) {
+            $query->where('asignado_a', $request->asignado_a);
+        }
+        
         if ($request->has('buscar')) {
             $buscar = $request->buscar;
             $query->where(function($q) use ($buscar) {
-                $q->where('descripcion', 'like', "%{$buscar}%");
+                $q->where('descripcion', 'like', "%{$buscar}%")
+                  ->orWhereHas('usuario', function($q) use ($buscar) {
+                      $q->where('nombre', 'like', "%{$buscar}%")
+                        ->orWhere('email', 'like', "%{$buscar}%")
+                        ->orWhere('cedula', 'like', "%{$buscar}%");
+                  });
             });
         }
         
@@ -294,38 +362,17 @@ class AdminController extends Controller
         
         $reporte->save();
         
-        // Enviar notificación personalizada al usuario que creó el reporte
-        if ($reporte->usuario && $reporte->usuario->fcm_token) {
-            $this->fcmService->sendNotification(
-                $reporte->usuario->fcm_token,
-                'Actualización de reporte',
-                'El estado de tu reporte ha cambiado de ' . $estadoAnterior . ' a ' . $reporte->estado,
-                'reporte_' . $reporte->id
-            );
-        }
-        
-        // Enviar notificación a todos los usuarios normales
-        $usuariosNormales = User::where('rol', 'usuario')
-            ->where('id', '!=', $reporte->usuario_id) // Excluir al dueño del reporte
-            ->whereNotNull('fcm_token')
-            ->where('fcm_token', '!=', '')
-            ->get();
-            
-        foreach ($usuariosNormales as $usuario) {
-            try {
-                $this->fcmService->sendNotification(
-                    $usuario->fcm_token,
-                    'Actualización de reporte',
-                    'Un reporte ha cambiado su estado a ' . $reporte->estado,
-                    'reporte_' . $reporte->id
-                );
-            } catch (\Exception $e) {
-                Log::error('Error enviando notificación a usuario: ' . $e->getMessage(), [
-                    'usuario_id' => $usuario->id,
-                    'reporte_id' => $reporte->id
-                ]);
-            }
-        }
+        // Notificar a todos los usuarios
+        $this->notificarCambioReporte(
+            $reporte,
+            'cambio_estado',
+            'Estado del reporte actualizado',
+            "ha cambiado de estado de {$estadoAnterior} a {$reporte->estado}",
+            [
+                'estado_anterior' => $estadoAnterior,
+                'nuevo_estado' => $reporte->estado
+            ]
+        );
         
         return response()->json([
             'message' => 'Estado del reporte actualizado correctamente',
@@ -352,38 +399,22 @@ class AdminController extends Controller
         $reporte->urgencia = $request->urgencia;
         $reporte->save();
         
-        // Enviar notificación personalizada al usuario que creó el reporte
-        if ($reporte->usuario && $reporte->usuario->fcm_token) {
-            $this->fcmService->sendNotification(
-                $reporte->usuario->fcm_token,
-                'Actualización de urgencia',
-                'La urgencia de tu reporte ha cambiado de ' . $urgenciaAnterior . ' a ' . $reporte->urgencia,
-                'reporte_' . $reporte->id
-            );
-        }
+        // Notificar a todos los usuarios
+        $this->notificarCambioReporte(
+            $reporte,
+            'cambio_urgencia',
+            'Urgencia del reporte actualizada',
+            "ha cambiado de urgencia de {$urgenciaAnterior} a {$reporte->urgencia}",
+            [
+                'urgencia_anterior' => $urgenciaAnterior,
+                'nueva_urgencia' => $reporte->urgencia
+            ]
+        );
         
-        // Enviar notificación a todos los usuarios normales
-        $usuariosNormales = User::where('rol', 'usuario')
-            ->where('id', '!=', $reporte->usuario_id) // Excluir al dueño del reporte
-            ->whereNotNull('fcm_token')
-            ->where('fcm_token', '!=', '')
-            ->get();
-            
-        foreach ($usuariosNormales as $usuario) {
-            try {
-                $this->fcmService->sendNotification(
-                    $usuario->fcm_token,
-                    'Actualización de urgencia',
-                    'Un reporte ha cambiado su nivel de urgencia a ' . $reporte->urgencia,
-                    'reporte_' . $reporte->id
-                );
-            } catch (\Exception $e) {
-                Log::error('Error enviando notificación a usuario: ' . $e->getMessage(), [
-                    'usuario_id' => $usuario->id,
-                    'reporte_id' => $reporte->id
-                ]);
-            }
-        }
+        return response()->json([
+            'message' => 'Urgencia del reporte actualizada correctamente',
+            'reporte' => $reporte
+        ]);
         
         return response()->json([
             'message' => 'Urgencia del reporte actualizada correctamente',
@@ -399,26 +430,38 @@ class AdminController extends Controller
         $reporte = Reporte::findOrFail($id);
         
         $validator = Validator::make($request->all(), [
-            'asignado_a' => 'required|exists:users,id',
+            'asignado_a' => 'required|exists:usuario,id',
         ]);
         
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
         
+        $asignadoAnterior = $reporte->asignado_a;
         $reporte->asignado_a = $request->asignado_a;
         $reporte->save();
         
-        // Notificar al usuario asignado
+        // Obtener nombre del usuario asignado
         $usuarioAsignado = User::find($request->asignado_a);
-        if ($usuarioAsignado && $usuarioAsignado->fcm_token) {
-            $this->fcmService->sendNotification(
-                $usuarioAsignado->fcm_token,
-                'Reporte asignado',
-                'Se te ha asignado el reporte: "' . $reporte->titulo . '"',
-                'reporte_' . $reporte->id
-            );
-        }
+        $nombreAsignado = $usuarioAsignado ? $usuarioAsignado->nombre : 'Sin asignar';
+        
+        // Notificar a todos los usuarios
+        $this->notificarCambioReporte(
+            $reporte,
+            'asignacion',
+            'Reporte asignado',
+            "ha sido asignado a {$nombreAsignado}",
+            [
+                'asignado_anterior_id' => $asignadoAnterior,
+                'nuevo_asignado_id' => $reporte->asignado_a,
+                'nuevo_asignado_nombre' => $nombreAsignado
+            ]
+        );
+        
+        return response()->json([
+            'message' => 'Reporte asignado correctamente',
+            'reporte' => $reporte
+        ]);
         
         return response()->json([
             'message' => 'Reporte asignado correctamente',
@@ -574,7 +617,7 @@ class AdminController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
         
-        $query = User::whereNotNull('fcm_token')->where('fcm_token', '!=', '');
+        $query = User::with('dispositivos');
         
         // Filtrar por rol específico
         if ($request->has('rol')) {
@@ -589,88 +632,84 @@ class AdminController extends Controller
         $usuarios = $query->get();
         $enviados = 0;
         $fallidos = 0;
+        $dispositivosNotificados = [];
         
         foreach ($usuarios as $usuario) {
-            try {
-                $result = $this->fcmService->sendNotification(
-                    $usuario->fcm_token,
-                    $request->titulo,
-                    $request->mensaje,
-                    'notificacion_admin_' . uniqid()
-                );
-                
-                if ($result) {
-                    $enviados++;
-                } else {
-                    $fallidos++;
+            if ($usuario->dispositivos->isEmpty()) {
+                continue;
+            }
+            
+            foreach ($usuario->dispositivos as $dispositivo) {
+                // Evitar notificar múltiples veces al mismo dispositivo
+                if (in_array($dispositivo->id, $dispositivosNotificados)) {
+                    continue;
                 }
-            } catch (\Exception $e) {
-                $fallidos++;
+                
+                try {
+                    $result = $this->fcmService->sendNotification(
+                        $dispositivo->fcm_token,
+                        $request->titulo,
+                        $request->mensaje,
+                        'notificacion_admin_' . uniqid()
+                    );
+                    
+                    if ($result) {
+                        $enviados++;
+                        $dispositivosNotificados[] = $dispositivo->id;
+                    } else {
+                        $fallidos++;
+                        Log::warning('No se pudo enviar notificación a dispositivo', [
+                            'usuario_id' => $usuario->id,
+                            'dispositivo_id' => $dispositivo->id
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    $fallidos++;
+                    Log::error('Error enviando notificación a dispositivo: ' . $e->getMessage(), [
+                        'usuario_id' => $usuario->id,
+                        'dispositivo_id' => $dispositivo->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
             }
         }
         
         return response()->json([
             'message' => 'Notificaciones enviadas',
             'total_usuarios' => $usuarios->count(),
-            'enviados' => $enviados,
-            'fallidos' => $fallidos
+            'dispositivos_enviados' => $enviados,
+            'dispositivos_fallidos' => $fallidos
         ]);
     }
-    
-    /**
-     * Obtener configuración del sistema
-     */
-    public function obtenerConfiguracion()
-    {
-        // Aquí puedes implementar la lógica para obtener configuraciones
-        // desde una tabla de configuración o desde el archivo .env
-        
-        return response()->json([
-            'app_name' => config('app.name'),
-            'app_url' => config('app.url'),
-            'mail_from_address' => config('mail.from.address'),
-            'mail_from_name' => config('mail.from.name'),
-            // Otras configuraciones relevantes
-        ]);
-    }
-    
-    /**
-     * Actualizar configuración del sistema
-     */
-    public function actualizarConfiguracion(Request $request)
-    {
-        // Aquí puedes implementar la lógica para actualizar configuraciones
-        // en una tabla de configuración o en el archivo .env
-        
-        return response()->json([
-            'message' => 'Configuración actualizada correctamente',
-            'configuracion' => $request->all()
-        ]);
-    }
-    
-    /**
-     * Exportar reportes a CSV/Excel
-     */
-    public function exportarReportes(Request $request)
-    {
-        // Aquí implementarías la lógica para exportar reportes
-        // Puedes usar paquetes como maatwebsite/excel
-        
-        return response()->json([
-            'message' => 'Función de exportación de reportes (implementación pendiente)'
-        ]);
-    }
-    
-    /**
-     * Exportar usuarios a CSV/Excel
-     */
-    public function exportarUsuarios(Request $request)
-    {
-        // Aquí implementarías la lógica para exportar usuarios
-        // Puedes usar paquetes como maatwebsite/excel
-        
-        return response()->json([
-            'message' => 'Función de exportación de usuarios (implementación pendiente)'
-        ]);
-    }
+
+/**
+ * Obtener configuración del sistema
+ */
+public function obtenerConfiguracion()
+{
+    // Aquí puedes implementar la lógica para obtener configuraciones
+    // desde una tabla de configuración o desde el archivo .env
+
+    return response()->json([
+        'app_name' => config('app.name'),
+        'app_url' => config('app.url'),
+        'mail_from_address' => config('mail.from.address'),
+        'mail_from_name' => config('mail.from.name'),
+        // Otras configuraciones relevantes
+    ]);
 }
+
+/**
+ * Exportar reportes a CSV/Excel
+ */
+public function exportarReportes(Request $request)
+{
+    // Aquí implementarías la lógica para exportar reportes
+    // Puedes usar paquetes como maatwebsite/excel
+
+    return response()->json([
+        'message' => 'Función de exportación de reportes (implementación pendiente)'
+    ]);
+}
+}
+

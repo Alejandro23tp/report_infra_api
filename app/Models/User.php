@@ -96,7 +96,15 @@ class User extends Authenticatable implements JWTSubject
      */
     public function comentarios()
     {
-        return $this->hasMany(Comentario::class, 'usuario_id');  // Cambiar 'user_id' a 'usuario_id'
+        return $this->hasMany(Comentario::class, 'usuario_id');
+    }
+
+    /**
+     * Get the user's devices.
+     */
+    public function dispositivos()
+    {
+        return $this->hasMany(DispositivosToken::class, 'usuario_id');
     }
 
     /**
