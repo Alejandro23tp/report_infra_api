@@ -14,6 +14,7 @@ use Google\Cloud\Vision\V1\Feature\Type;
 use Google\Cloud\Vision\V1\AnnotateImageRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB, Log, Storage, Validator};
+use App\Events\NuevoReporteCreado;
 
 class ReportesController extends RestController
 {
@@ -198,6 +199,10 @@ class ReportesController extends RestController
             // Notificar a todos los usuarios sobre el nuevo reporte
             try {
                 $this->notificarNuevoReporteATodos($reporte);
+                
+                // Disparar evento para notificar a los suscriptores por correo
+                event(new NuevoReporteCreado($reporte));
+                
             } catch (\Exception $e) {
                 Log::error('Error al notificar nuevo reporte: ' . $e->getMessage());
             }

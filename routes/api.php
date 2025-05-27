@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\ComentarioController;
 use App\Http\Controllers\FCMController;
 use App\Http\Controllers\LoginController;
+use App\Http\Controllers\Api\NotificacionController;
 use App\Http\Controllers\ReaccionController;
 use App\Http\Controllers\UserController;
 use App\Models\User;  // Agregar este import
@@ -79,15 +80,13 @@ Route::prefix('comentarios')->group(function () {
     Route::delete('/{id}', [ComentarioController::class, 'destroy']);
 });
 
-// Notificaciones
+// Notificaciones Push
 Route::group(['middleware' => ['api']], function () {    
     Route::post('/subscribe', [FCMController::class, 'subscribe'])->middleware('auth:api');
     Route::get('/notificaciones/status', [FCMController::class, 'checkNotificationStatus'])->middleware('auth:api');
     Route::post('/unsubscribe', [FCMController::class, 'unsubscribe'])->middleware('auth:api');
     Route::get('/lista-dispositivos', [FCMController::class, 'listDevices'])->middleware('auth:api');
 });
-//Notificaciones
-//Route::middleware('auth:api')->post('/subscribe', [FCMController::class, 'subscribe']);
 
 //test
 Route::get('/test-fcm', function () {
@@ -175,5 +174,17 @@ Route::group([
     Route::prefix('reportes/{reporte}/historial')->group(function () {
         Route::get('/', [\App\Http\Controllers\ReporteHistorialController::class, 'index']);
         Route::post('/comentario', [\App\Http\Controllers\ReporteHistorialController::class, 'agregarComentario']);
+    });
+
+    // Suscripciones a notificaciones por correo
+    Route::prefix('suscripciones-correo')->group(function () {
+    // Suscribir un correo para recibir notificaciones
+    Route::post('/suscribir', [NotificacionController::class, 'suscribir']);
+    
+    // Cancelar suscripción de notificaciones
+    Route::post('/cancelar/{email}', [NotificacionController::class, 'cancelarSuscripcion']);
+    
+    // Obtener lista de suscriptores (protegido, solo administradores)
+    Route::get('/listar', [NotificacionController::class, 'listarSuscriptores']);
     });
 });
