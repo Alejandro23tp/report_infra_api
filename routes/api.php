@@ -168,8 +168,8 @@ Route::group([
     Route::post('/notificaciones/enviar', [AdminController::class, 'enviarNotificacionMasiva']);
     
     // Exportación de datos
-    Route::get('/exportar/reportes', [AdminController::class, 'exportarReportes']);
-    Route::get('/exportar/usuarios', [AdminController::class, 'exportarUsuarios']);
+    Route::get('/exportar/reportes', [AdminController::class, 'exportarReportes'])->name('admin.reportes.exportar');
+    Route::get('/exportar/usuarios', [AdminController::class, 'exportarUsuarios'])->name('admin.usuarios.exportar');
     
     // Historial de reportes
     Route::prefix('reportes/{reporte}/historial')->group(function () {

@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
+use Rap2hpoutre\FastExcel\FastExcel;
+
 class AdminController extends Controller
 {
     protected $fcmService;
@@ -694,16 +696,145 @@ public function obtenerConfiguracion()
 }
 
 /**
- * Exportar reportes a CSV/Excel
+ * Exportar reportes a Excel
+ * 
+ * @param  \Illuminate\Http\Request  $request
+ * @return \Symfony\Component\HttpFoundation\StreamedResponse|\Illuminate\Http\JsonResponse
  */
 public function exportarReportes(Request $request)
 {
-    // Aquí implementarías la lógica para exportar reportes
-    // Puedes usar paquetes como maatwebsite/excel
+    try {
+        // Validar los parámetros de filtrado
+        $validated = $request->validate([
+            'fecha_inicio' => 'nullable|date',
+            'fecha_fin' => 'nullable|date|after_or_equal:fecha_inicio',
+            'estado' => 'nullable|string|in:Pendiente,En Progreso,Completado,Cancelado',
+            'categoria_id' => 'nullable|exists:categorias,id',
+        ]);
 
-    return response()->json([
-        'message' => 'Función de exportación de reportes (implementación pendiente)'
-    ]);
+        // Construir la consulta con los filtros
+        $query = Reporte::with(['usuario', 'categoria', 'asignadoA']);
+
+        if ($request->has('fecha_inicio')) {
+            $query->where('created_at', '>=', $request->fecha_inicio);
+        }
+
+        if ($request->has('fecha_fin')) {
+            $query->where('created_at', '<=', $request->fecha_fin . ' 23:59:59');
+        }
+
+        if ($request->has('estado')) {
+            $query->where('estado', $request->estado);
+        }
+
+        if ($request->has('categoria_id')) {
+            $query->where('categoria_id', $request->categoria_id);
+        }
+
+        $reportes = $query->orderBy('created_at', 'desc')->get();
+
+        // Transformar los datos para la exportación
+        $data = $reportes->map(function($reporte) {
+            return [
+                'ID' => $reporte->id,
+                'Título' => $reporte->titulo,
+                'Descripción' => $reporte->descripcion,
+                'Categoría' => $reporte->categoria ? $reporte->categoria->nombre : 'Sin categoría',
+                'Estado' => ucfirst(str_replace('_', ' ', $reporte->estado)),
+                'Prioridad' => ucfirst($reporte->urgencia ?? 'No especificada'),
+                'Reportado por' => $reporte->usuario ? $reporte->usuario->nombre : 'Usuario eliminado',
+                'Asignado a' => $reporte->asignadoA ? $reporte->asignadoA->name : 'No asignado',
+                'Ubicación' => $reporte->ubicacion,
+                'Fecha de creación' => $reporte->created_at->format('Y-m-d H:i:s'),
+                'Última actualización' => $reporte->updated_at->format('Y-m-d H:i:s'),
+            ];
+        });
+
+        $fechaActual = Carbon::now()->format('Y-m-d_H-i-s');
+        $nombreArchivo = "reportes_{$fechaActual}.xlsx";
+
+        // Retornar el archivo Excel para descargar
+        return (new FastExcel($data))->download($nombreArchivo);
+        
+    } catch (\Exception $e) {
+        \Log::error('Error al exportar reportes: ' . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'message' => 'Error al exportar los reportes',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
+/**
+ * Exportar usuarios a Excel
+ * 
+ * @param  \Illuminate\Http\Request  $request
+ * @return \Symfony\Component\HttpFoundation\StreamedResponse|\Illuminate\Http\JsonResponse
+ */
+public function exportarUsuarios(Request $request)
+{
+    try {
+        // Validar los parámetros de filtrado
+        $validated = $request->validate([
+            'rol' => 'nullable|string',
+            'activo' => 'nullable|in:true,false,0,1', // Acepta true/false como string o 0/1
+            'fecha_registro_desde' => 'nullable|date',
+            'fecha_registro_hasta' => 'nullable|date|after_or_equal:fecha_registro_desde',
+        ]);
+
+        // Construir la consulta con los filtros
+        $query = User::query();
+
+        if ($request->has('rol')) {
+            $query->where('rol', $request->rol);
+        }
+
+        if ($request->has('activo')) {
+            // Convertir 'true'/'false' string a booleano
+            $activo = $request->activo === 'true' || $request->activo === '1';
+            $query->where('activo', $activo);
+        }
+
+        if ($request->has('fecha_registro_desde')) {
+            $query->where('created_at', '>=', $request->fecha_registro_desde);
+        }
+
+        if ($request->has('fecha_registro_hasta')) {
+            $query->where('created_at', '<=', $request->fecha_registro_hasta . ' 23:59:59');
+        }
+
+        // Ordenar por nombre
+        $usuarios = $query->orderBy('nombre')->get();
+
+        // Transformar los datos para la exportación
+        $data = $usuarios->map(function($usuario) {
+            return [
+                'ID' => $usuario->id,
+                'Nombre' => $usuario->nombre,
+                'Email' => $usuario->email,
+                'Rol' => $usuario->rol ? ucfirst($usuario->rol) : 'Usuario',
+                'Teléfono' => $usuario->telefono ?? 'No especificado',
+                'Activo' => $usuario->activo ? 'Sí' : 'No',
+                'Email Verificado' => $usuario->email_verified_at ? 'Sí' : 'No',
+                'Fecha de Registro' => $usuario->created_at->format('Y-m-d H:i:s'),
+                'Última Actualización' => $usuario->updated_at->format('Y-m-d H:i:s'),
+            ];
+        });
+
+        $fechaActual = now()->format('Y-m-d_His');
+        $nombreArchivo = "usuarios_exportados_{$fechaActual}.xlsx";
+
+        return (new FastExcel($data))->download($nombreArchivo);
+        
+    } catch (\Exception $e) {
+        \Log::error('Error al exportar usuarios: ' . $e->getMessage());
+        \Log::error($e->getTraceAsString());
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Error al exportar los usuarios: ' . $e->getMessage()
+        ], 500);
+    }
 }
 }
-
