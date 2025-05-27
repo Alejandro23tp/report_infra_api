@@ -496,9 +496,6 @@ class AdminController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'nombre' => 'required|string|max:255|unique:categorias,nombre',
-            'descripcion' => 'sometimes|nullable|string',
-            'color' => 'sometimes|nullable|string|max:7',
-            'icono' => 'sometimes|nullable|string|max:50',
         ]);
         
         if ($validator->fails()) {
@@ -522,9 +519,6 @@ class AdminController extends Controller
         
         $validator = Validator::make($request->all(), [
             'nombre' => 'sometimes|string|max:255|unique:categorias,nombre,' . $id,
-            'descripcion' => 'sometimes|nullable|string',
-            'color' => 'sometimes|nullable|string|max:7',
-            'icono' => 'sometimes|nullable|string|max:50',
         ]);
         
         if ($validator->fails()) {
@@ -609,7 +603,7 @@ class AdminController extends Controller
             'mensaje' => 'required|string',
             'usuarios' => 'sometimes|array',
             'usuarios.*' => 'exists:usuario,id',
-            'rol' => 'sometimes|string|in:administrador,usuario,moderador',
+            'rol' => 'sometimes|string|in:admin,usuario',
             'todos' => 'sometimes|boolean',
         ]);
         

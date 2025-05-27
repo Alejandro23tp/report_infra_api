@@ -2,8 +2,9 @@
 
 namespace App\Rest\Controllers;
 
-use App\Models\{Reporte, Categoria, User, Reaccion, Comentario};
+use App\Models\{Reporte, Categoria, User, Reaccion, Comentario, DispositivosToken};
 use App\Services\NotificacionService;
+use App\Services\FCMService;
 use App\Rest\Controller as RestController;
 use App\Rest\Resources\ReporteResource;
 use Google\Cloud\Vision\V1\Client\ImageAnnotatorClient;
@@ -18,7 +19,101 @@ class ReportesController extends RestController
 {
     protected $model = Reporte::class;
     public static $resource = ReporteResource::class;
+    
+    protected $fcmService;
+    
+    public function __construct(FCMService $fcmService)
+    {
+        $this->fcmService = $fcmService;
+    }
 
+    /**
+     * Notifica a todos los usuarios sobre un nuevo reporte
+     */
+    private function notificarNuevoReporteATodos(Reporte $reporte)
+    {
+        try {
+            // Obtener todos los usuarios activos con sus dispositivos
+            $usuarios = User::where('activo', true)
+                ->whereHas('dispositivos')
+                ->with('dispositivos')
+                ->get();
+                
+            // Preparar la descripción (mostrar solo los primeros 50 caracteres si es muy larga)
+            $descripcion = strlen($reporte->descripcion) > 50 
+                ? substr($reporte->descripcion, 0, 50) . '...' 
+                : $reporte->descripcion;
+                
+            // Enviar notificación a todos los usuarios con dispositivos registrados
+            foreach ($usuarios as $usuario) {
+                $esCreador = $usuario->id === $reporte->usuario_id;
+                
+                // Personalizar el mensaje para el creador
+                $titulo = $esCreador 
+                    ? '¡Reporte Creado Exitosamente!' 
+                    : 'Nuevo Reporte en tu Área';
+                    
+                $mensaje = $esCreador 
+                    ? "Tu reporte \"{$descripcion}\" ha sido creado exitosamente." 
+                    : "Se ha reportado un nuevo problema: \"{$descripcion}\"";
+                
+                // Agregar nivel de urgencia al mensaje si existe
+                if (!empty($reporte->urgencia)) {
+                    $mensaje .= " (Urgencia: " . ucfirst($reporte->urgencia) . ")";
+                }
+                
+                // Enviar notificación a cada dispositivo del usuario
+                foreach ($usuario->dispositivos as $dispositivo) {
+                    try {
+                        $this->fcmService->sendNotification(
+                            $dispositivo->fcm_token,
+                            $titulo,
+                            $mensaje,
+                            'reporte_nuevo_' . $reporte->id,
+                            [
+                                'tipo' => 'nuevo_reporte',
+                                'reporte_id' => $reporte->id,
+                                'es_creador' => $esCreador
+                            ]
+                        );
+                        
+                        // Actualizar último uso del token
+                        $dispositivo->update(['ultimo_uso' => now()]);
+                    } catch (\Exception $e) {
+                        Log::error('Error enviando notificación a dispositivo: ' . $e->getMessage(), [
+                            'usuario_id' => $usuario->id,
+                            'dispositivo_id' => $dispositivo->id,
+                            'reporte_id' => $reporte->id
+                        ]);
+                    }
+                }
+                
+                // Guardar notificación en la base de datos
+                try {
+                    \App\Models\Notificacion::create([
+                        'usuario_id' => $usuario->id,
+                        'reporte_id' => $reporte->id,
+                        'titulo' => $titulo,
+                        'mensaje' => $mensaje,
+                        'leido' => false,
+                        'data' => json_encode([
+                            'tipo' => 'nuevo_reporte',
+                            'reporte_id' => $reporte->id,
+                            'es_creador' => $esCreador
+                        ])
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('Error guardando notificación en BD: ' . $e->getMessage());
+                }
+            }
+            
+            return true;
+        } catch (\Exception $e) {
+            Log::error('Error en notificarNuevoReporteATodos: ' . $e->getMessage());
+            return false;
+        }
+    }
+    
     // Constantes para categorías y palabras clave
     protected const CATEGORIAS = [
         'Daños estructurales' => ['building damage', 'structural damage', 'wall damage', 'crack', 'broken structure'],
@@ -100,9 +195,9 @@ class ReportesController extends RestController
                 $this->guardarImagenReporte($reporte, $request->file('imagen'));
             }
 
-            // Intentar notificar de manera segura usando el servicio de notificaciones
+            // Notificar a todos los usuarios sobre el nuevo reporte
             try {
-                app(NotificacionService::class)->notificarNuevoReporte($reporte);
+                $this->notificarNuevoReporteATodos($reporte);
             } catch (\Exception $e) {
                 Log::error('Error al notificar nuevo reporte: ' . $e->getMessage());
             }
