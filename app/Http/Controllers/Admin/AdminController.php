@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\DispositivosToken;
+use App\Models\Notificacion;
 use App\Models\User;
+use Illuminate\Support\Facades\Log;
+use App\Models\DispositivosToken;
 use App\Models\Reporte;
 use App\Models\Categoria;
 use App\Models\Comentario;
@@ -13,7 +15,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Log;
 
 use Rap2hpoutre\FastExcel\FastExcel;
 
@@ -628,44 +629,57 @@ class AdminController extends Controller
         $usuarios = $query->get();
         $enviados = 0;
         $fallidos = 0;
+        $notificacionesCreadas = 0;
         $dispositivosNotificados = [];
         
         foreach ($usuarios as $usuario) {
-            if ($usuario->dispositivos->isEmpty()) {
-                continue;
+            // Crear notificación en la base de datos para cada usuario
+            try {
+                Notificacion::create([
+                    'usuario_id' => $usuario->id,
+                    'titulo' => $request->titulo,
+                    'mensaje' => $request->mensaje,
+                    'leido' => false
+                ]);
+                $notificacionesCreadas++;
+            } catch (\Exception $e) {
+                Log::error('Error al crear notificación para usuario ' . $usuario->id . ': ' . $e->getMessage());
             }
             
-            foreach ($usuario->dispositivos as $dispositivo) {
-                // Evitar notificar múltiples veces al mismo dispositivo
-                if (in_array($dispositivo->id, $dispositivosNotificados)) {
-                    continue;
-                }
-                
-                try {
-                    $result = $this->fcmService->sendNotification(
-                        $dispositivo->fcm_token,
-                        $request->titulo,
-                        $request->mensaje,
-                        'notificacion_admin_' . uniqid()
-                    );
+            // Enviar notificaciones push a los dispositivos
+            if ($usuario->dispositivos->isNotEmpty()) {
+                foreach ($usuario->dispositivos as $dispositivo) {
+                    // Evitar notificar múltiples veces al mismo dispositivo
+                    if (in_array($dispositivo->id, $dispositivosNotificados)) {
+                        continue;
+                    }
                     
-                    if ($result) {
-                        $enviados++;
-                        $dispositivosNotificados[] = $dispositivo->id;
-                    } else {
+                    try {
+                        $result = $this->fcmService->sendNotification(
+                            $dispositivo->fcm_token,
+                            $request->titulo,
+                            $request->mensaje,
+                            'notificacion_masiva_' . uniqid()
+                        );
+                        
+                        if ($result) {
+                            $enviados++;
+                            $dispositivosNotificados[] = $dispositivo->id;
+                        } else {
+                            $fallidos++;
+                            Log::warning('No se pudo enviar notificación a dispositivo', [
+                                'usuario_id' => $usuario->id,
+                                'dispositivo_id' => $dispositivo->id
+                            ]);
+                        }
+                    } catch (\Exception $e) {
                         $fallidos++;
-                        Log::warning('No se pudo enviar notificación a dispositivo', [
+                        Log::error('Error enviando notificación a dispositivo: ' . $e->getMessage(), [
                             'usuario_id' => $usuario->id,
-                            'dispositivo_id' => $dispositivo->id
+                            'dispositivo_id' => $dispositivo->id,
+                            'error' => $e->getMessage()
                         ]);
                     }
-                } catch (\Exception $e) {
-                    $fallidos++;
-                    Log::error('Error enviando notificación a dispositivo: ' . $e->getMessage(), [
-                        'usuario_id' => $usuario->id,
-                        'dispositivo_id' => $dispositivo->id,
-                        'error' => $e->getMessage()
-                    ]);
                 }
             }
         }
@@ -673,6 +687,7 @@ class AdminController extends Controller
         return response()->json([
             'message' => 'Notificaciones enviadas',
             'total_usuarios' => $usuarios->count(),
+            'notificaciones_creadas' => $notificacionesCreadas,
             'dispositivos_enviados' => $enviados,
             'dispositivos_fallidos' => $fallidos
         ]);

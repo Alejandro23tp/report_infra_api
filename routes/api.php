@@ -5,6 +5,7 @@ use App\Http\Controllers\ComentarioController;
 use App\Http\Controllers\FCMController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\Api\NotificacionController;
+use App\Http\Controllers\Api\NotificacionAppController;
 use App\Http\Controllers\ReaccionController;
 use App\Http\Controllers\UserController;
 use App\Models\User;  // Agregar este import
@@ -85,7 +86,15 @@ Route::group(['middleware' => ['api']], function () {
     Route::post('/subscribe', [FCMController::class, 'subscribe'])->middleware('auth:api');
     Route::get('/notificaciones/status', [FCMController::class, 'checkNotificationStatus'])->middleware('auth:api');
     Route::post('/unsubscribe', [FCMController::class, 'unsubscribe'])->middleware('auth:api');
-    Route::get('/lista-dispositivos', [FCMController::class, 'listDevices'])->middleware('auth:api');
+        Route::get('/lista-dispositivos', [FCMController::class, 'listDevices'])->middleware('auth:api');
+    
+    // Rutas para notificaciones de la aplicación
+    Route::prefix('notificaciones-app')->group(function () {
+        Route::get('/', [NotificacionAppController::class, 'index']);
+        Route::post('/marcar-leida/{id}', [NotificacionAppController::class, 'marcarComoLeida']);
+        Route::get('/contar-no-leidas', [NotificacionAppController::class, 'contarNoLeidas']);
+        Route::post('/marcar-todas-leidas', [NotificacionAppController::class, 'marcarTodasComoLeidas']);
+    });
 });
 
 //test
