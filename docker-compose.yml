@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reportes_infra_app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    ports:
+      - "8000:80"
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=${APP_ENV:-production}
+      - APP_DEBUG=${APP_DEBUG:-false}
+      - APP_KEY=${APP_KEY}
+      - APP_URL=${APP_URL}
+      - DB_CONNECTION=${DB_CONNECTION}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - QUEUE_CONNECTION=${QUEUE_CONNECTION:-database}
+      - LOG_CHANNEL=stderr
+    depends_on:
+      - mysql
+
+  # Servicio de MySQL local (comentado ya que estás usando RDS)
+  # mysql:
+  #   image: mysql:8.0
+  #   container_name: reportes_infra_mysql
+  #   restart: unless-stopped
+  #   environment:
+  #     MYSQL_DATABASE: laravel
+  #     MYSQL_USER: laravel
+  #     MYSQL_PASSWORD: secret
+  #     MYSQL_ROOT_PASSWORD: root
+  #   volumes:
+  #     - dbdata:/var/lib/mysql
+  #   ports:
+  #     - "3306:3306"
+
+  # Worker para procesar colas
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reportes_infra_worker
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=${APP_ENV:-production}
+      - APP_DEBUG=${APP_DEBUG:-false}
+      - DB_CONNECTION=${DB_CONNECTION}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - QUEUE_CONNECTION=${QUEUE_CONNECTION:-database}
+    command: bash -c "php artisan queue:work --tries=3 --timeout=300"
+
+  # Agrega aquí otros servicios como Redis si son necesarios
+
+volumes:
+  dbdata:
