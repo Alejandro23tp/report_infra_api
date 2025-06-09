@@ -1,43 +1,52 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
-# Configuración para Render
-# Las variables de entorno se configuran en el panel de Render
+# Create necessary directories
+mkdir -p /var/log/nginx /var/log/php /run/nginx /run/php
+chown -R www-data:www-data /var/log/nginx /var/log/php /run/nginx /run/php
+chmod -R 775 /var/log/nginx /var/log/php /run/nginx /run/php
 
-# Establecer permisos de almacenamiento
-chown -R www-data:www-data /var/www/html/storage
-chmod -R 775 /var/www/html/storage
-chmod -R 775 /var/www/html/bootstrap/cache
+# Set permissions for Laravel directories
+chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
-# Crear enlace simbólico de almacenamiento si no existe
-if [ ! -L /var/www/html/public/storage ]; then
+# Wait for database to be ready
+echo "Waiting for database..."
+until php artisan db:monitor > /dev/null 2>&1; do
+  >&2 echo "Database is unavailable - sleeping"
+  sleep 1
+done
+
+# Run database migrations
+echo "Running migrations..."
+php artisan migrate --force
+
+# Clear and cache configuration
+echo "Caching configuration..."
+php artisan config:clear
+php artisan config:cache
+
+# Clear and cache routes
+echo "Caching routes..."
+php artisan route:clear
+php artisan route:cache
+
+# Clear and cache views
+echo "Caching views..."
+php artisan view:clear
+php artisan view:cache
+
+# Clear and cache application
+echo "Caching application..."
+php artisan cache:clear
+php artisan optimize
+
+# Create storage link if it doesn't exist
+if [ ! -L "public/storage" ]; then
+    echo "Creating storage link..."
     php artisan storage:link
 fi
 
-# Limpiar caché
-php artisan config:clear
-php artisan cache:clear
-php artisan view:clear
-php artisan route:clear
-
-# Optimizar la aplicación
-php artisan optimize
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
-
-# Crear directorio de colas si no existe
-mkdir -p /var/www/html/storage/framework/cache/data
-chown -R www-data:www-data /var/www/html/storage/framework/cache/data
-chmod -R 775 /var/www/html/storage/framework/cache/data
-
-# Establecer permisos para los logs
-touch /var/www/html/storage/logs/laravel.log
-chown -R www-data:www-data /var/www/html/storage/logs
-chmod -R 775 /var/www/html/storage/logs
-
-# Ejecutar migraciones
-php artisan migrate --force
-
-# Iniciar supervisord
+# Start supervisord in the foreground
+echo "Starting services..."
 exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf

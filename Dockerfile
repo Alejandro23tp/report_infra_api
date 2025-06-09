@@ -1,72 +1,78 @@
 # Usa una imagen base ligera
-FROM php:8.2-fpm-alpine
+FROM php:8.2-fpm-alpine AS builder
 
-# Instala dependencias
+# Install build dependencies
 RUN apk add --no-cache \
-    nginx \
-    supervisor \
     libpng-dev \
     libjpeg-turbo-dev \
     freetype-dev \
     libzip-dev \
     zip \
     unzip \
-    bash \
-    procps \
-    htop \
-    vim \
-    curl
+    git
 
-# Configura PHP
+# Configure PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg
 RUN docker-php-ext-install pdo_mysql gd zip pcntl
 
-# Instala Composer
+# Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Configura el directorio de trabajo
+# Set working directory
 WORKDIR /var/www/html
 
-# Copia primero solo los archivos necesarios para instalar dependencias
+# Copy only composer files for dependency installation
 COPY composer.json composer.lock ./
 
-# Instala dependencias (sin dependencias de desarrollo)
-RUN composer install --no-dev --optimize-autoloader --no-scripts --no-interaction
+# Install dependencies (no dev)
+RUN composer install --no-dev --no-interaction --optimize-autoloader --no-scripts
 
-# Copia el resto de los archivos, excluyendo .env si existe
+# Copy application files
 COPY . .
 
-# Crea directorios necesarios
-RUN mkdir -p /var/log/supervisor \
-    && mkdir -p /var/run/php \
-    && mkdir -p /var/run/nginx \
-    && mkdir -p /var/run/supervisor \
-    && mkdir -p /var/log/nginx \
-    && touch /var/log/nginx/access.log \
-    && touch /var/log/nginx/error.log
+# Runtime image
+FROM php:8.2-fpm-alpine
 
-# Crea directorio de logs de Laravel
-RUN mkdir -p /var/www/html/storage/logs \
-    && touch /var/www/html/storage/logs/worker.log \
-    && touch /var/www/html/storage/logs/laravel.log \
-    && touch /var/log/php-fpm.log
+# Install runtime dependencies
+RUN apk add --no-cache \
+    nginx \
+    supervisor \
+    libpng \
+    libjpeg-turbo \
+    freetype \
+    libzip \
+    bash
 
-# Configura los permisos
-RUN chown -R www-data:www-data /var/www/html/storage \
+# Copy PHP extensions from builder
+COPY --from=builder /usr/local/etc/php/conf.d /usr/local/etc/php/conf.d
+COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
+
+# Copy application files from builder
+COPY --from=builder /var/www/html /var/www/html
+
+# Copy configurations
+COPY docker/nginx.conf /etc/nginx/nginx.conf
+COPY docker/php-fpm.conf /usr/local/etc/php-fpm.d/zz-docker.conf
+COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY start.sh /usr/local/bin/start.sh
+
+# Set working directory
+WORKDIR /var/www/html
+
+# Create necessary directories and set permissions
+RUN mkdir -p /var/log/nginx /var/log/php /run/nginx /run/php \
+    && chown -R www-data:www-data /var/www/html/storage \
+    && chown -R www-data:www-data /var/www/html/bootstrap/cache \
     && chmod -R 775 /var/www/html/storage \
     && chmod -R 775 /var/www/html/bootstrap/cache \
-    && chown -R www-data:www-data /var/log/nginx \
-    && chown -R www-data:www-data /var/log/php-fpm.log
+    && chmod +x /usr/local/bin/start.sh
 
-# Copia la configuración
-COPY docker/nginx.conf /etc/nginx/nginx.conf
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-COPY docker/php-fpm.conf /usr/local/etc/php-fpm.d/zz-docker.conf
-
-# No es necesario generar claves aquí, Render manejará las variables de entorno
-
-# Expone el puerto
+# Expose port 8000 for web traffic
 EXPOSE 8000
 
-# Comando de inicio
-CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# Start script
+CMD ["/usr/local/bin/start.sh"]
