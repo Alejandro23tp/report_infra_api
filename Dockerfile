@@ -59,18 +59,21 @@ COPY --from=builder /var/www/html /var/www/html
 # Copy configurations
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/php-fpm.conf /usr/local/etc/php-fpm.d/zz-docker.conf
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+# Copiar configuración de supervisord
+COPY docker/supervisor/conf.d/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY start.sh /usr/local/bin/start.sh
 
 # Set working directory
 WORKDIR /var/www/html
 
 # Create necessary directories and set permissions
-RUN mkdir -p /var/log/nginx /var/log/php /run/nginx /run/php \
+RUN mkdir -p /var/log/nginx /var/log/php /var/log/supervisor /run/nginx /run/php /var/run/php \
     && chown -R www-data:www-data /var/www/html/storage \
     && chown -R www-data:www-data /var/www/html/bootstrap/cache \
+    && chown -R www-data:www-data /var/log/supervisor \
     && chmod -R 775 /var/www/html/storage \
     && chmod -R 775 /var/www/html/bootstrap/cache \
+    && chmod -R 775 /var/log/supervisor \
     && chmod +x /usr/local/bin/start.sh
 
 # Expose port 8000 for web traffic
