@@ -33,7 +33,7 @@ COPY . .
 # Runtime image
 FROM php:8.2-fpm-alpine
 
-# Install runtime dependencies
+# Install runtime dependencies and network tools
 RUN apk add --no-cache \
     nginx \
     supervisor \
@@ -41,7 +41,15 @@ RUN apk add --no-cache \
     libjpeg-turbo \
     freetype \
     libzip \
-    bash
+    bash \
+    iputils \
+    netcat-openbsd \
+    mysql-client \
+    curl \
+    procps \
+    busybox-extras \
+    tcpdump \
+    bind-tools
 
 # Copy PHP extensions from builder
 COPY --from=builder /usr/local/etc/php/conf.d /usr/local/etc/php/conf.d
