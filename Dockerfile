@@ -33,7 +33,7 @@ COPY composer.json composer.lock ./
 # Instala dependencias (sin dependencias de desarrollo)
 RUN composer install --no-dev --optimize-autoloader --no-scripts --no-interaction
 
-# Copia el resto de los archivos
+# Copia el resto de los archivos, excluyendo .env si existe
 COPY . .
 
 # Crea directorios necesarios
@@ -63,8 +63,7 @@ COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/php-fpm.conf /usr/local/etc/php-fpm.d/zz-docker.conf
 
-# Genera la clave de la aplicación
-RUN php artisan key:generate
+# No es necesario generar claves aquí, Render manejará las variables de entorno
 
 # Expone el puerto
 EXPOSE 8000

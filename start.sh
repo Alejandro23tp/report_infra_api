@@ -1,6 +1,9 @@
 #!/bin/sh
 set -e
 
+# Configuración para Render
+# Las variables de entorno se configuran en el panel de Render
+
 # Establecer permisos de almacenamiento
 chown -R www-data:www-data /var/www/html/storage
 chmod -R 775 /var/www/html/storage
@@ -10,9 +13,6 @@ chmod -R 775 /var/www/html/bootstrap/cache
 if [ ! -L /var/www/html/public/storage ]; then
     php artisan storage:link
 fi
-
-# Ejecutar migraciones
-php artisan migrate --force
 
 # Limpiar caché
 php artisan config:clear
@@ -35,6 +35,9 @@ chmod -R 775 /var/www/html/storage/framework/cache/data
 touch /var/www/html/storage/logs/laravel.log
 chown -R www-data:www-data /var/www/html/storage/logs
 chmod -R 775 /var/www/html/storage/logs
+
+# Ejecutar migraciones
+php artisan migrate --force
 
 # Iniciar supervisord
 exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf
