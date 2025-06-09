@@ -1,52 +1,56 @@
-# Utiliza la imagen base de PHP con Apache
-FROM php:8.2-apache
+# Usa una imagen base ligera
+FROM php:8.2-fpm-alpine
 
-# Instala dependencias del sistema
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
+# Instala dependencias
+RUN apk add --no-cache \
+    nginx \
+    supervisor \
     libpng-dev \
-    libonig-dev \
-    libxml2-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    libzip-dev \
     zip \
     unzip \
-    libzip-dev \
-    libicu-dev \
-    libjpeg62-turbo-dev \
-    libfreetype6-dev \
-    libpng-dev \
-    libwebp-dev \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
-    && docker-php-ext-install -j$(nproc) gd \
-    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath zip intl
+    bash
 
-# Habilita mod_rewrite de Apache
-RUN a2enmod rewrite
-
-# Configura el directorio de trabajo
-WORKDIR /var/www/html
-
-# Copia el contenido de la aplicación
-COPY . .
-
+# Configura PHP
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg
+RUN docker-php-ext-install pdo_mysql gd zip
 
 # Instala Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Instala dependencias de Composer
-RUN composer install --no-interaction --optimize-autoloader --no-dev
+# Configura el directorio de trabajo
+WORKDIR /var/www/html
 
-# Establece permisos
-RUN chown -R www-data:www-data /var/www/html \
+# Copia los archivos necesarios
+COPY . .
+
+# Instala dependencias (sin dependencias de desarrollo)
+RUN composer install --no-dev --optimize-autoloader --no-scripts
+
+# Crea directorios necesarios
+RUN mkdir -p /var/log/supervisor \
+    && mkdir -p /var/run/php \
+    && mkdir -p /var/run/nginx \
+    && mkdir -p /var/run/supervisor
+
+# Crea directorio de logs
+RUN mkdir -p /var/www/html/storage/logs \
+    && touch /var/www/html/storage/logs/worker.log \
+    && touch /var/www/html/storage/logs/laravel.log
+
+# Configura los permisos
+RUN chown -R www-data:www-data /var/www/html/storage \
     && chmod -R 775 /var/www/html/storage \
     && chmod -R 775 /var/www/html/bootstrap/cache
 
-# Configura el archivo .env
-RUN cp .env.example .env \
-    && php artisan key:generate
+# Copia la configuración
+COPY docker/nginx.conf /etc/nginx/nginx.conf
+COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Expone el puerto 80
-EXPOSE 80
+# Expone el puerto
+EXPOSE 8000
 
-# Comando para iniciar el servidor
-CMD ["apache2-foreground"]
+# Comando de inicio
+CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
