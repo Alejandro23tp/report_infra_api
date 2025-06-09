@@ -12,9 +12,18 @@ chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
 # Wait for database to be ready
 echo "Waiting for database..."
-until php artisan db:monitor > /dev/null 2>&1; do
-  >&2 echo "Database is unavailable - sleeping"
+max_retries=30
+counter=0
+
+# Check if database is ready
+until php artisan db:show --env=production > /dev/null 2>&1; do
+  >&2 echo "Database is unavailable - sleeping (attempt $counter/$max_retries)"
   sleep 1
+  counter=$((counter+1))
+  if [ $counter -ge $max_retries ]; then
+    >&2 echo "Max retries reached. Database is still not available."
+    exit 1
+  fi
 done
 
 # Run database migrations
