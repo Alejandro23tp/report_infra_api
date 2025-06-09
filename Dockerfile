@@ -21,14 +21,12 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy only composer files for dependency installation
-COPY composer.json composer.lock ./
-
-# Install dependencies (no dev)
-RUN composer install --no-dev --no-interaction --optimize-autoloader --no-scripts
-
-# Copy application files
+# Copy application files first
 COPY . .
+
+# Install dependencies
+RUN composer install --no-interaction --optimize-autoloader --no-scripts
+RUN php artisan package:discover --ansi
 
 # Runtime image
 FROM php:8.2-fpm-alpine
