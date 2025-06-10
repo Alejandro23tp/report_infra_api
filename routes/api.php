@@ -22,7 +22,7 @@ use App\Http\Controllers\Admin\AdminController;
 // Configuración CORS para todas las rutas de la API
 Route::options('/{any}', function () {
     return response()->noContent()
-        ->header('Access-Control-Allow-Origin', 'http://localhost:4200') // Cambia esto a tu origen Angular
+        ->header('Access-Control-Allow-Origin', 'https://reportes-infraestructura.vercel.app') // Cambia esto a tu origen Angular http://localhost:4200
         ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
         ->header('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, X-Token-Auth, Authorization')
         ->header('Access-Control-Allow-Credentials', 'true');
