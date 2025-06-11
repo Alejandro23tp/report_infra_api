@@ -10,6 +10,11 @@ chmod -R 775 /var/log/nginx /var/log/php /run/nginx /run/php
 chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
+# Ensure the storage/app/public directory exists
+mkdir -p /var/www/html/storage/app/public/reportes
+chown -R www-data:www-data /var/www/html/storage/app/public
+chmod -R 775 /var/www/html/storage/app/public
+
 # Wait for database to be ready
 echo "=== Starting database connection check ==="
 max_retries=30
