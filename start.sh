@@ -49,21 +49,18 @@ while [ $counter -lt $max_retries ]; do
     "; then
         echo "✓ Database connection successful!"
 
-# Configurar caché
-if [ "$CACHE_DRIVER" = "database" ]; then
-    echo "Configurando caché en base de datos..."
-    php artisan cache:table
-    php artisan migrate --force
-else
-    echo "Configurando caché en archivos..."
-    php artisan config:clear
-fi
+# Forzar caché en archivos
+echo "Configurando caché en archivos..."
+php artisan config:set cache.default file
+php artisan config:set cache.stores.file.driver file
 
 # Limpiar caché
-php artisan cache:clear
+echo "Limpiando caché..."
 php artisan config:clear
+php artisan cache:clear
 php artisan route:clear
 php artisan view:clear
+php artisan optimize:clear
         break
     fi
   
