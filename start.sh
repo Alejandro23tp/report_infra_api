@@ -51,8 +51,21 @@ while [ $counter -lt $max_retries ]; do
 
 # Forzar caché en archivos
 echo "Configurando caché en archivos..."
-php artisan config:set cache.default file
-php artisan config:set cache.stores.file.driver file
+# Crear archivo de configuración temporal para forzar caché en archivos
+cat > /var/www/html/config/cache.php << 'EOL'
+<?php
+
+return [
+    'default' => 'file',
+    'stores' => [
+        'file' => [
+            'driver' => 'file',
+            'path' => storage_path('framework/cache/data'),
+        ],
+    ],
+    'prefix' => 'laravel_cache',
+];
+EOL
 
 # Limpiar caché
 echo "Limpiando caché..."
