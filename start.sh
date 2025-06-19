@@ -48,6 +48,22 @@ while [ $counter -lt $max_retries ]; do
     }
     "; then
         echo "✓ Database connection successful!"
+
+# Configurar caché
+if [ "$CACHE_DRIVER" = "database" ]; then
+    echo "Configurando caché en base de datos..."
+    php artisan cache:table
+    php artisan migrate --force
+else
+    echo "Configurando caché en archivos..."
+    php artisan config:clear
+fi
+
+# Limpiar caché
+php artisan cache:clear
+php artisan config:clear
+php artisan route:clear
+php artisan view:clear
         break
     fi
   
@@ -68,9 +84,12 @@ done
 
 echo "=== Database connection check completed ==="
 
-# Run database migrations
+# Run migrations
 echo "Running migrations..."
 php artisan migrate --force
+
+# Crear enlace simbólico para el almacenamiento
+php artisan storage:link
 
 # Clear and cache configuration
 echo "Caching configuration..."
