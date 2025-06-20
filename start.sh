@@ -94,9 +94,42 @@ done
 
 echo "=== Database connection check completed ==="
 
-# Run migrations
-echo "Running migrations..."
-php artisan migrate --force
+# Run migrations with better error handling
+echo "=== Running migrations ==="
+echo "Current migration status:"
+php artisan migrate:status
+
+echo "\n=== Attempting to run migrations ==="
+if ! php artisan migrate --force; then
+    echo "\n❌ Error: Migrations failed"
+    echo "\n=== Migration status after failure ==="
+    php artisan migrate:status
+    
+    echo "\n=== Checking for migrations table ==="
+    php artisan tinker --execute="echo 'Migrations table exists: ' . (Schema::hasTable('migrations') ? 'Yes' : 'No') . "\n";"
+    
+    echo "\n=== Attempting to create migrations table if not exists ==="
+    php artisan migrate:install --force
+    
+    echo "\n=== Retrying migrations ==="
+    if ! php artisan migrate --force; then
+        echo "\n❌ Critical error: Could not run migrations after retry"
+        
+        echo "\n=== Attempting database refresh ==="
+        if php artisan db:refresh-without-checks --force; then
+            echo "\n✅ Database refreshed successfully"
+        else
+            echo "\n❌ Failed to refresh database"
+            echo "\n=== Last 50 lines of error log ==="
+            tail -n 50 storage/logs/laravel.log || echo "No se pudo leer el archivo de log"
+            exit 1
+        fi
+    fi
+fi
+
+echo "\n✅ Migrations completed successfully"
+echo "=== Final migration status ==="
+php artisan migrate:status
 
 # Crear enlace simbólico para el almacenamiento
 php artisan storage:link
