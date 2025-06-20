@@ -1,6 +1,20 @@
 #!/bin/bash
 set -e
 
+# Configuración optimizada para 512MB de RAM
+export PHP_MEMORY_LIMIT=128M
+export PHP_MAX_EXECUTION_TIME=60
+
+# Configuración de PHP-FPM para bajo consumo
+if [ -f /usr/local/etc/php-fpm.d/www.conf ]; then
+    echo "Optimizando PHP-FPM para bajo consumo..."
+    sed -i "s/;*pm\.max_children *=.*/pm.max_children = 5/" /usr/local/etc/php-fpm.d/www.conf
+    sed -i "s/;*pm\.start_servers *=.*/pm.start_servers = 2/" /usr/local/etc/php-fpm.d/www.conf
+    sed -i "s/;*pm\.min_spare_servers *=.*/pm.min_spare_servers = 1/" /usr/local/etc/php-fpm.d/www.conf
+    sed -i "s/;*pm\.max_spare_servers *=.*/pm.max_spare_servers = 3/" /usr/local/etc/php-fpm.d/www.conf
+    sed -i "s/;*pm\.max_requests *=.*/pm.max_requests = 200/" /usr/local/etc/php-fpm.d/www.conf
+fi
+
 # Create necessary directories
 mkdir -p /var/log/nginx /var/log/php /run/nginx /run/php
 chown -R www-data:www-data /var/log/nginx /var/log/php /run/nginx /run/php
