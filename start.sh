@@ -97,22 +97,33 @@ echo "=== Database connection check completed ==="
 # Run migrations with better error handling
 echo "=== Initializing migrations ==="
 # Crear la tabla de migraciones si no existe
-if ! php artisan migrate:install --force; then
+if ! php artisan migrate:install; then
     echo "❌ Failed to create migrations table"
-    echo "=== Checking database permissions ==="
+    echo "=== Checking database connection ==="
     php -r "
+    require __DIR__.'/vendor/autoload.php';
+    \$app = require_once __DIR__.'/bootstrap/app.php';
+    \$kernel = \$app->make(Illinewline\Contracts\Console\Kernel::class);
+    \$kernel->bootstrap();
+    
     try {
-        \DB::statement('SHOW TABLES');
-        echo '✅ Can list tables\n';
+        \DB::connection()->getPdo();
+        echo '✅ Connected to database\n';
+        
+        // Verificar si podemos crear una tabla
+        try {
+            \Schema::create('test_table', function(\Illuminate\Database\Schema\Blueprint \$table) {
+                \$table->id();
+            });
+            echo '✅ Can create tables\n';
+            \Schema::dropIfExists('test_table');
+        } catch (Exception \$e) {
+            echo '❌ Cannot create tables: ' . \$e->getMessage() . '\n';
+        }
+        
     } catch (Exception \$e) {
-        echo '❌ Database error: ' . \$e->getMessage() . '\n';
+        echo '❌ Database connection failed: ' . \$e->getMessage() . '\n';
     }"
-    exit 1
-fi
-
-# Verificar que la tabla de migraciones existe
-if ! php artisan migrate:status &>/dev/null; then
-    echo "❌ Failed to verify migrations table"
     exit 1
 fi
 
@@ -122,21 +133,51 @@ if ! php artisan migrate --force; then
     echo "\n=== Migration status ==="
     php artisan migrate:status || true
     
-    echo "\n=== Database tables ==="
+    echo "\n=== Database info ==="
     php -r "
+    require __DIR__.'/vendor/autoload.php';
+    \$app = require_once __DIR__.'/bootstrap/app.php';
+    \$kernel = \$app->make(Illinewline\Contracts\Console\Kernel::class);
+    \$kernel->bootstrap();
+    
     try {
+        // Mostrar información de la base de datos
+        \$pdo = \DB::connection()->getPdo();
+        echo 'Database: ' . \$pdo->query('SELECT DATABASE()')->fetchColumn() . "\n";
+        
+        // Listar tablas
         \$tables = \DB::select('SHOW TABLES');
-        echo 'Found ' . count(\$tables) . ' tables\n';
+        echo '\nTables in database (' . count(\$tables) . '):\n';
         foreach (\$tables as \$table) {
-            \$tableName = array_values((array)\$table)[0];
-            echo '- ' . \$tableName . '\n';
+            echo '- ' . array_values((array)\$table)[0] . "\n";
         }
+        
+        // Verificar tabla de migraciones
+        if (\Schema::hasTable('migrations')) {
+            echo "\n✅ Migrations table exists\n";
+            \$migrations = \DB::table('migrations')->count();
+            echo "Migrations count: \$migrations\n";
+            
+            // Mostrar migraciones fallidas si las hay
+            \$failed = \DB::table('migrations')->where('batch', '>', 1)->count();
+            if (\$failed > 0) {
+                echo "\n❌ Found \$failed failed migrations\n";
+                \$failedMigrations = \DB::table('migrations')
+                    ->where('batch', '>', 1)
+                    ->pluck('migration')
+                    ->toArray();
+                echo "Failed migrations: " . implode(', ', \$failedMigrations) . "\n";
+            }
+        } else {
+            echo "\n❌ Migrations table does not exist\n";
+        }
+        
     } catch (Exception \$e) {
-        echo '❌ Error listing tables: ' . \$e->getMessage() . '\n';
+        echo '❌ Error: ' . \$e->getMessage() . "\n";
     }"
     
     echo "\n=== Attempting to fix migrations ==="
-    php artisan migrate:install --force
+    php artisan migrate:install
     
     echo "\n=== Retrying migrations ==="
     if ! php artisan migrate --force; then
