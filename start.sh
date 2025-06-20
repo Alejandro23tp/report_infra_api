@@ -95,20 +95,47 @@ done
 echo "=== Database connection check completed ==="
 
 # Run migrations with better error handling
-echo "=== Running migrations ==="
-echo "Current migration status:"
-php artisan migrate:status
+echo "=== Initializing migrations ==="
+# Crear la tabla de migraciones si no existe
+if ! php artisan migrate:install --force; then
+    echo "❌ Failed to create migrations table"
+    echo "=== Checking database permissions ==="
+    php -r "
+    try {
+        \DB::statement('SHOW TABLES');
+        echo '✅ Can list tables\n';
+    } catch (Exception \$e) {
+        echo '❌ Database error: ' . \$e->getMessage() . '\n';
+    }"
+    exit 1
+fi
 
-echo "\n=== Attempting to run migrations ==="
+# Verificar que la tabla de migraciones existe
+if ! php artisan migrate:status &>/dev/null; then
+    echo "❌ Failed to verify migrations table"
+    exit 1
+fi
+
+echo "=== Running migrations ==="
 if ! php artisan migrate --force; then
     echo "\n❌ Error: Migrations failed"
-    echo "\n=== Migration status after failure ==="
-    php artisan migrate:status
+    echo "\n=== Migration status ==="
+    php artisan migrate:status || true
     
-    echo "\n=== Checking for migrations table ==="
-    php artisan tinker --execute="echo 'Migrations table exists: ' . (Schema::hasTable('migrations') ? 'Yes' : 'No') . "\n";"
+    echo "\n=== Database tables ==="
+    php -r "
+    try {
+        \$tables = \DB::select('SHOW TABLES');
+        echo 'Found ' . count(\$tables) . ' tables\n';
+        foreach (\$tables as \$table) {
+            \$tableName = array_values((array)\$table)[0];
+            echo '- ' . \$tableName . '\n';
+        }
+    } catch (Exception \$e) {
+        echo '❌ Error listing tables: ' . \$e->getMessage() . '\n';
+    }"
     
-    echo "\n=== Attempting to create migrations table if not exists ==="
+    echo "\n=== Attempting to fix migrations ==="
     php artisan migrate:install --force
     
     echo "\n=== Retrying migrations ==="
