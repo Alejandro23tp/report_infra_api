@@ -17,14 +17,41 @@ class LoginController extends Controller
         ]);
 
         try {
+            // Primero intentar autenticar al usuario
             if (!$token = JWTAuth::attempt($credentials)) {
-                return response()->json(['error' => 'Credenciales inválidas'], 401);
+                // Si falla, verificar si el usuario existe
+                $user = User::where('email', $credentials['email'])->first();
+                
+                if (!$user) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Las credenciales proporcionadas no son válidas.'
+                    ], 401);
+                }
+                
+                // Si el usuario existe pero la contraseña es incorrecta
+                return response()->json([
+                    'success' => false,
+                    'message' => 'La contraseña ingresada es incorrecta.'
+                ], 401);
             }
+            
+            // Si la autenticación fue exitosa, obtener el usuario
+            $user = JWTAuth::user();
+            
+            // Verificar si el usuario está activo
+            if ($user->activo != 1) {
+                // Invalidar el token si el usuario está inactivo
+                JWTAuth::invalidate(JWTAuth::getToken());
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Tu cuenta ha sido desactivada. Por favor, contacta al administrador.'
+                ], 403);
+            }
+            
         } catch (JWTException $e) {
             return response()->json(['error' => 'No se pudo crear el token'], 500);
         }
-
-        $user = JWTAuth::user();
 
         return response()->json([
             'access_token' => $token,

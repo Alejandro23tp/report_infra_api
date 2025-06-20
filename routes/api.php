@@ -49,7 +49,6 @@ Rest::resource('usuarios', UsuariosController::class);
 // Ruta para listar todos los usuarios
 Route::get('usuarios/all', [UsuariosController::class, 'listarTodos']);
 
-
 // Rutas para reportes
 Rest::resource('reportes', ReportesController::class);
 Route::get('reportes/all', [ReportesController::class, 'listarReportes']);
@@ -150,8 +149,8 @@ Route::group([
     Route::put('/usuarios/{id}', [AdminController::class, 'actualizarUsuario']);
     Route::delete('/usuarios/{id}', [AdminController::class, 'eliminarUsuario']);
     Route::put('/usuarios/{id}/rol', [AdminController::class, 'cambiarRolUsuario']);
-    Route::put('/usuarios/{id}/estado', [AdminController::class, 'cambiarEstadoUsuario']);
-    
+    Route::put('/usuarios/{id}/estado', [AdminController::class, 'cambiarEstadoUsuario']); 
+  
     // Gestión de reportes
     Route::get('/reportes', [AdminController::class, 'listarReportes']);
     Route::get('/reportes/{id}', [AdminController::class, 'verReporte']);
