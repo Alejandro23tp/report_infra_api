@@ -98,38 +98,23 @@ echo "=== Database connection check completed ==="
 echo "=== Initializing migrations ==="
 
 # Verificar y configurar la tabla de migraciones
-php -r "
-require __DIR__.'/vendor/autoload.php';
-\$app = require_once __DIR__.'/bootstrap/app.php';
-\$app->make('Illuminate\\Contracts\\Console\\Kernel')->bootstrap();
+echo "=== Checking migrations table ==="
 
-try {
-    // Verificar si la tabla de migraciones ya existe
-    if (!\Schema::hasTable('migrations')) {
-        echo 'ℹ️ Migrations table does not exist. Creating...\n';
-        \Artisan::call('migrate:install');
-        echo '✅ Migrations table created successfully\n';
-    } else {
-        echo '✅ Migrations table already exists\n';
-    }
+# Verificar si la tabla de migraciones existe
+if php artisan migrate:status | grep -q 'Migration table not found'; then
+    echo "ℹ️ Migrations table does not exist. Creating..."
+    if ! php artisan migrate:install; then
+        echo "❌ Failed to create migrations table"
+        exit 1
+    fi
+    echo "✅ Migrations table created successfully"
+else
+    echo "✅ Migrations table exists"
     
-    // Verificar si hay migraciones pendientes
-    $pendingMigrations = \DB::table('migrations')
-        ->where('batch', '>=', 1)
-        ->count() === 0;
-        
-    if ($pendingMigrations) {
-        echo 'ℹ️ No migrations have been run yet\n';
-    } else {
-        $lastBatch = \DB::table('migrations')->max('batch');
-        $migrationCount = \DB::table('migrations')->where('batch', $lastBatch)->count();
-        echo "ℹ️ Last migration batch: $lastBatch ($migrationCount migrations)\\n";
-    }
-    
-} catch (Exception \$e) {
-    echo '❌ Error checking migrations: ' . \$e->getMessage() . '\n';
-    exit(1);
-}"
+    # Mostrar información de migraciones
+    echo -e "\n=== Migration Status ==="
+    php artisan migrate:status
+fi
 
 echo "=== Running migrations ==="
 if ! php artisan migrate --force; then
