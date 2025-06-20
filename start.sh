@@ -96,36 +96,40 @@ echo "=== Database connection check completed ==="
 
 # Run migrations with better error handling
 echo "=== Initializing migrations ==="
-# Crear la tabla de migraciones si no existe
-if ! php artisan migrate:install; then
-    echo "❌ Failed to create migrations table"
-    echo "=== Checking database connection ==="
-    php -r "
-    require __DIR__.'/vendor/autoload.php';
-    \$app = require_once __DIR__.'/bootstrap/app.php';
-    \$kernel = \$app->make(Illinewline\Contracts\Console\Kernel::class);
-    \$kernel->bootstrap();
+
+# Verificar y configurar la tabla de migraciones
+php -r "
+require __DIR__.'/vendor/autoload.php';
+\$app = require_once __DIR__.'/bootstrap/app.php';
+\$app->make('Illuminate\\Contracts\\Console\\Kernel')->bootstrap();
+
+try {
+    // Verificar si la tabla de migraciones ya existe
+    if (!\Schema::hasTable('migrations')) {
+        echo 'ℹ️ Migrations table does not exist. Creating...\n';
+        \Artisan::call('migrate:install');
+        echo '✅ Migrations table created successfully\n';
+    } else {
+        echo '✅ Migrations table already exists\n';
+    }
     
-    try {
-        \DB::connection()->getPdo();
-        echo '✅ Connected to database\n';
+    // Verificar si hay migraciones pendientes
+    $pendingMigrations = \DB::table('migrations')
+        ->where('batch', '>=', 1)
+        ->count() === 0;
         
-        // Verificar si podemos crear una tabla
-        try {
-            \Schema::create('test_table', function(\Illuminate\Database\Schema\Blueprint \$table) {
-                \$table->id();
-            });
-            echo '✅ Can create tables\n';
-            \Schema::dropIfExists('test_table');
-        } catch (Exception \$e) {
-            echo '❌ Cannot create tables: ' . \$e->getMessage() . '\n';
-        }
-        
-    } catch (Exception \$e) {
-        echo '❌ Database connection failed: ' . \$e->getMessage() . '\n';
-    }"
-    exit 1
-fi
+    if ($pendingMigrations) {
+        echo 'ℹ️ No migrations have been run yet\n';
+    } else {
+        $lastBatch = \DB::table('migrations')->max('batch');
+        $migrationCount = \DB::table('migrations')->where('batch', $lastBatch)->count();
+        echo "ℹ️ Last migration batch: $lastBatch ($migrationCount migrations)\\n";
+    }
+    
+} catch (Exception \$e) {
+    echo '❌ Error checking migrations: ' . \$e->getMessage() . '\n';
+    exit(1);
+}"
 
 echo "=== Running migrations ==="
 if ! php artisan migrate --force; then
